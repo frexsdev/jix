@@ -1,0 +1,205 @@
+const std = @import("std");
+const io = std.io;
+const fs = std.fs;
+const fmt = std.fmt;
+const mem = std.mem;
+const log = std.log;
+const math = std.math;
+const ascii = std.ascii;
+const Writer = std.fs.File.Writer;
+const Allocator = std.mem.Allocator;
+const Inst = @import("inst.zig").Inst;
+const Array = @import("array.zig").Array;
+const InstType = @import("inst.zig").InstType;
+const JixError = @import("error.zig").JixError;
+const InstFromString = @import("inst.zig").InstFromString;
+const InstHasOperand = @import("inst.zig").InstHasOperand;
+
+const stdout = io.getStdOut().writer();
+const stderr = io.getStdErr().writer();
+
+pub const Word = i64;
+
+pub const Jix = struct {
+    allocator: Allocator,
+
+    stack: Array(Word),
+
+    program: Array(Inst),
+    ip: Word = 0,
+
+    halt: bool = false,
+
+    const Self = @This();
+
+    pub fn init(allocator: Allocator) Self {
+        return .{
+            .allocator = allocator,
+            .stack = Array(Word).init(allocator),
+            .program = Array(Inst).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.stack.deinit();
+        self.program.deinit();
+        self.* = undefined;
+    }
+
+    pub fn translateAsm(self: *Self, file_path: []const u8) !void {
+        var absolute_path = try fs.realpathAlloc(self.allocator, file_path);
+        defer self.allocator.free(absolute_path);
+
+        const f = try fs.openFileAbsolute(absolute_path, .{ .mode = .read_only });
+        defer f.close();
+
+        var source = try f.readToEndAlloc(self.allocator, math.maxInt(usize));
+        defer self.allocator.free(source);
+
+        var lines = mem.split(u8, source, "\n");
+        while (lines.next()) |o_line| {
+            if (o_line.len < 1) continue;
+
+            const line = mem.trim(u8, o_line, &ascii.spaces);
+            var parts = mem.split(u8, line, " ");
+            const inst_name = parts.next().?;
+
+            if (InstFromString.get(inst_name)) |inst_type| {
+                if (InstHasOperand.get(inst_name).?) {
+                    const operand = fmt.parseInt(Word, parts.next().?, 10) catch return JixError.IllegalOperand;
+                    try self.program.push(.{ .@"type" = inst_type, .operand = operand });
+                } else {
+                    try self.program.push(.{ .@"type" = inst_type });
+                }
+            }
+        }
+    }
+
+    pub fn executeProgram(self: *Self) JixError!void {
+        var i: usize = 0;
+        while (i < 69 and !self.halt) : (i += 1)
+            try self.executeInst();
+
+        self.dump(stdout);
+    }
+
+    pub fn executeInst(self: *Self) JixError!void {
+        if (self.ip < 0 or self.ip >= self.program.size())
+            return JixError.IllegalInstAccess;
+
+        const inst = self.program.get(@intCast(usize, self.ip));
+
+        switch (inst.@"type") {
+            // stack
+            .push => {
+                try self.stack.push(inst.operand);
+
+                self.ip += 1;
+            },
+            .dup => {
+                if (@intCast(i64, self.stack.size()) - inst.operand <= 0)
+                    return JixError.StackUnderflow;
+
+                if (inst.operand < 0)
+                    return JixError.IllegalOperand;
+
+                try self.stack.push(self.stack.get(self.stack.size() - 1 - @intCast(usize, inst.operand)));
+
+                self.ip += 1;
+            },
+
+            // arithmetics
+            .plus => {
+                const a = try self.stack.pop();
+                const b = try self.stack.pop();
+                try self.stack.push(b + a);
+
+                self.ip += 1;
+            },
+            .minus => {
+                const a = try self.stack.pop();
+                const b = try self.stack.pop();
+                try self.stack.push(b - a);
+
+                self.ip += 1;
+            },
+            .mult => {
+                const a = try self.stack.pop();
+                const b = try self.stack.pop();
+                try self.stack.push(b * a);
+
+                self.ip += 1;
+            },
+            .div => {
+                const a = try self.stack.pop();
+                const b = try self.stack.pop();
+                try self.stack.push(math.divExact(Word, b, a) catch return JixError.DivByZero);
+
+                self.ip += 1;
+            },
+            .eq => {
+                const a = try self.stack.pop();
+                const b = try self.stack.pop();
+                try self.stack.push(@boolToInt(a == b));
+
+                self.ip += 1;
+            },
+
+            // misc
+            .jmp => self.ip = inst.operand,
+            .jmp_if => {
+                const a = try self.stack.pop();
+                if (a != 0)
+                    self.ip = inst.operand
+                else
+                    self.ip += 1;
+            },
+            .halt => self.halt = true,
+        }
+    }
+
+    pub fn dump(self: *const Self, writer: Writer) void {
+        writer.print("Stack:\n", .{}) catch unreachable;
+
+        if (self.stack.size() > 0) {
+            var i: usize = 0;
+            while (i < self.stack.size()) : (i += 1) {
+                writer.print("  {}\n", .{self.stack.get(i)}) catch unreachable;
+            }
+        } else writer.print("  [empty]\n", .{}) catch unreachable;
+    }
+
+    pub fn loadProgramFromMemory(self: *Self, program_slice: []const Inst) Allocator.Error!void {
+        for (program_slice) |inst|
+            try self.program.push(inst);
+    }
+
+    pub fn loadProgramFromFile(self: *Self, file_path: []const u8) !void {
+        var absolute_path = try fs.realpathAlloc(self.allocator, file_path);
+        defer self.allocator.free(absolute_path);
+
+        const f = try fs.openFileAbsolute(absolute_path, .{ .mode = .read_only });
+        defer f.close();
+
+        while (true) {
+            const inst = f.reader().readStruct(Inst) catch |e| {
+                if (e == error.EndOfStream)
+                    break
+                else
+                    return e;
+            };
+
+            try self.program.push(inst);
+        }
+    }
+
+    pub fn saveProgramToFile(self: *const Self, file_path: []const u8) !void {
+        const cwd = fs.cwd();
+
+        const f = try cwd.createFile(file_path, .{});
+        defer f.close();
+
+        for (self.program.items()) |inst|
+            try f.writer().writeStruct(inst);
+    }
+};
