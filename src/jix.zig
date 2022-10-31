@@ -364,6 +364,10 @@ pub const Jix = struct {
                 else
                     self.ip += 1;
             },
+            .ret => {
+                const a = (try self.stack.pop()).as_u64;
+                self.ip = a;
+            },
             .halt => self.halt = true,
         }
     }

@@ -32,6 +32,7 @@ pub const InstType = enum {
     // misc
     jmp,
     jmp_if,
+    ret,
     halt,
 };
 
@@ -69,6 +70,7 @@ pub const InstFromString = ComptimeStringMap(InstType, .{
     // misc
     .{ "jmp", .jmp },
     .{ "jmp_if", .jmp_if },
+    .{ "ret", .ret },
     .{ "halt", .halt },
 });
 
@@ -101,5 +103,6 @@ pub const InstHasOperand = ComptimeStringMap(bool, .{
     // misc
     .{ "jmp", true },
     .{ "jmp_if", true },
+    .{ "ret", false },
     .{ "halt", false },
 });
