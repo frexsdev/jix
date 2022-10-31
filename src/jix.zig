@@ -99,8 +99,8 @@ pub const Jix = struct {
                         const t_operand = mem.trim(u8, operand, &ascii.spaces);
 
                         if (ascii.isDigit(t_operand[0])) {
-                            const n_operand = fmt.parseInt(u64, t_operand, 10) catch return JixError.IllegalOperand;
-                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = n_operand } });
+                            const n_operand = fmt.parseInt(i64, t_operand, 10) catch return JixError.IllegalOperand;
+                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_i64 = n_operand } });
                         } else {
                             try self.context.deferred_operands.push(.{
                                 .addr = self.program.size(),
@@ -113,8 +113,8 @@ pub const Jix = struct {
                 } else if (inst_type == .push) {
                     if (parts.next()) |operand| {
                         const t_operand = mem.trim(u8, operand, &ascii.spaces);
-                        if (fmt.parseInt(u64, t_operand, 10)) |i_operand| {
-                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = i_operand } });
+                        if (fmt.parseInt(i64, t_operand, 10)) |i_operand| {
+                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_i64 = i_operand } });
                         } else |_| {
                             if (fmt.parseFloat(f64, t_operand)) |f_operand| {
                                 try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_f64 = f_operand } });
@@ -127,8 +127,8 @@ pub const Jix = struct {
                     if (InstHasOperand.get(inst_name).?) {
                         if (parts.next()) |operand| {
                             const t_operand = mem.trim(u8, operand, &ascii.spaces);
-                            const n_operand = fmt.parseInt(u64, t_operand, 10) catch return JixError.IllegalOperand;
-                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = n_operand } });
+                            const n_operand = fmt.parseInt(i64, t_operand, 10) catch return JixError.IllegalOperand;
+                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_i64 = n_operand } });
                         } else return JixError.MissingOperand;
                     } else {
                         try self.program.push(.{ .@"type" = inst_type });
@@ -172,16 +172,16 @@ pub const Jix = struct {
                 self.ip += 1;
             },
             .dup => {
-                if (self.stack.size() - inst.operand.as_u64 <= 0)
+                if (self.stack.size() - @intCast(InstAddr, inst.operand.as_i64) <= 0)
                     return JixError.StackUnderflow;
 
-                try self.stack.push(self.stack.get(self.stack.size() - 1 - inst.operand.as_u64));
+                try self.stack.push(self.stack.get(self.stack.size() - 1 - @intCast(InstAddr, inst.operand.as_i64)));
 
                 self.ip += 1;
             },
             .swap => {
                 const a = self.stack.size() - 1;
-                const b = self.stack.size() - 1 - inst.operand.as_u64;
+                const b = self.stack.size() - 1 - @intCast(usize, inst.operand.as_i64);
 
                 const t = self.stack.get(a);
                 self.stack.items()[a] = self.stack.get(b);
