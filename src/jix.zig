@@ -83,12 +83,19 @@ pub const Jix = struct {
                 if (InstFromString.get(inst_name)) |inst_type| {
                     if (inst_type == .jmp or inst_type == .jmp_if) {
                         if (parts.next()) |operand| {
-                            try self.context.deferred_operands.push(.{
-                                .addr = self.program.size(),
-                                .label = mem.trim(u8, operand, &ascii.spaces),
-                            });
+                            const t_operand = mem.trim(u8, operand, &ascii.spaces);
 
-                            try self.program.push(.{ .@"type" = inst_type });
+                            if (ascii.isDigit(t_operand[0])) {
+                                const n_operand = fmt.parseInt(Word, t_operand, 10) catch return JixError.IllegalOperand;
+                                try self.program.push(.{ .@"type" = inst_type, .operand = n_operand });
+                            } else {
+                                try self.context.deferred_operands.push(.{
+                                    .addr = self.program.size(),
+                                    .label = t_operand,
+                                });
+
+                                try self.program.push(.{ .@"type" = inst_type });
+                            }
                         } else return JixError.MissingOperand;
                     } else {
                         if (InstHasOperand.get(inst_name).?) {
