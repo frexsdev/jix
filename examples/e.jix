@@ -1,0 +1,31 @@
+   push 1.
+   push 1.
+   push 1.
+loop:
+   push 1.
+   dup 2
+   divf
+   plusf
+
+   swap 2
+   push 1.
+   plusf
+   dup 0
+   swap 2
+   multf
+
+   swap 1
+   swap 2
+
+   dup 2
+   push 100.
+   gef
+
+   jmp_if loop
+
+   swap 1
+   drop
+   swap 1
+   drop
+   
+   halt

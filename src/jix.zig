@@ -179,6 +179,21 @@ pub const Jix = struct {
 
                 self.ip += 1;
             },
+            .swap => {
+                const a = self.stack.size() - 1;
+                const b = self.stack.size() - 1 - inst.operand.as_u64;
+
+                const t = self.stack.get(a);
+                self.stack.items()[a] = self.stack.get(b);
+                self.stack.items()[b] = t;
+
+                self.ip += 1;
+            },
+            .drop => {
+                _ = try self.stack.pop();
+
+                self.ip += 1;
+            },
 
             // arithmetics
             .plusi => {
@@ -242,22 +257,52 @@ pub const Jix = struct {
             .divi => {
                 const a = (try self.stack.pop()).as_u64;
                 const b = (try self.stack.pop()).as_u64;
-                try self.stack.push(.{ .as_u64 = math.divExact(u64, b, a) catch return JixError.DivByZero });
+
+                if (a == 0 or b == 0)
+                    return JixError.DivByZero;
+
+                try self.stack.push(.{ .as_u64 = b / a });
 
                 self.ip += 1;
             },
             .divf => {
                 const a = (try self.stack.pop()).as_f64;
                 const b = (try self.stack.pop()).as_f64;
-                try self.stack.push(.{ .as_f64 = math.divExact(f64, b, a) catch return JixError.DivByZero });
+
+                if (a == 0 or b == 0)
+                    return JixError.DivByZero;
+
+                try self.stack.push(.{ .as_f64 = b / a });
 
                 self.ip += 1;
             },
 
-            .eq => {
+            .eqi => {
                 const a = (try self.stack.pop()).as_u64;
                 const b = (try self.stack.pop()).as_u64;
                 try self.stack.push(.{ .as_u64 = @boolToInt(a == b) });
+
+                self.ip += 1;
+            },
+            .eqf => {
+                const a = (try self.stack.pop()).as_f64;
+                const b = (try self.stack.pop()).as_f64;
+                try self.stack.push(.{ .as_u64 = @boolToInt(a == b) });
+
+                self.ip += 1;
+            },
+
+            .gei => {
+                const a = (try self.stack.pop()).as_u64;
+                const b = (try self.stack.pop()).as_u64;
+                try self.stack.push(.{ .as_u64 = @boolToInt(a >= b) });
+
+                self.ip += 1;
+            },
+            .gef => {
+                const a = (try self.stack.pop()).as_f64;
+                const b = (try self.stack.pop()).as_f64;
+                try self.stack.push(.{ .as_u64 = @boolToInt(a >= b) });
 
                 self.ip += 1;
             },

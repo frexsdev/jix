@@ -7,6 +7,8 @@ pub const InstType = enum {
     // stack
     push,
     dup,
+    swap,
+    drop,
 
     // arithmetics
     plusi,
@@ -21,7 +23,11 @@ pub const InstType = enum {
     divi,
     divf,
 
-    eq,
+    eqi,
+    eqf,
+
+    gei,
+    gef,
 
     // misc
     jmp,
@@ -38,6 +44,8 @@ pub const InstFromString = ComptimeStringMap(InstType, .{
     // stack
     .{ "push", .push },
     .{ "dup", .dup },
+    .{ "swap", .swap },
+    .{ "drop", .drop },
 
     // arithmetics
     .{ "plusi", .plusi },
@@ -52,7 +60,11 @@ pub const InstFromString = ComptimeStringMap(InstType, .{
     .{ "divi", .divi },
     .{ "divf", .divf },
 
-    .{ "eq", .eq },
+    .{ "eqi", .eqi },
+    .{ "eqf", .eqf },
+
+    .{ "gei", .gei },
+    .{ "gef", .gef },
 
     // misc
     .{ "jmp", .jmp },
@@ -64,6 +76,8 @@ pub const InstHasOperand = ComptimeStringMap(bool, .{
     // stack
     .{ "push", true },
     .{ "dup", true },
+    .{ "swap", true },
+    .{ "drop", false },
 
     // arithmetics
     .{ "plusi", false },
@@ -78,7 +92,11 @@ pub const InstHasOperand = ComptimeStringMap(bool, .{
     .{ "divi", false },
     .{ "divf", false },
 
-    .{ "eq", false },
+    .{ "eqi", false },
+    .{ "eqf", false },
+
+    .{ "gei", false },
+    .{ "gef", false },
 
     // misc
     .{ "jmp", true },
