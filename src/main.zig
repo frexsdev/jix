@@ -1,10 +1,11 @@
 const std = @import("std");
-const Inst = @import("inst.zig").Inst;
 const io = std.io;
 const mem = std.mem;
 const process = std.process;
 const Writer = std.fs.File.Writer;
 const Jix = @import("jix.zig").Jix;
+const Inst = @import("inst.zig").Inst;
+const JixError = @import("error.zig").JixError;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const InstHasOperand = @import("inst.zig").InstHasOperand;
 
@@ -84,7 +85,32 @@ pub fn main() !void {
                 var jix = Jix.init(allocator);
                 defer jix.deinit();
 
-                try jix.translateAsm(file_path);
+                jix.translateAsm(file_path) catch |e| {
+                    switch (e) {
+                        JixError.IllegalInst => {
+                            stderr.print("{s}:{}: error: illegal instruction\n", .{
+                                file_path,
+                                jix.error_context.illegal_inst.line_number,
+                            }) catch unreachable;
+                            process.exit(1);
+                        },
+                        JixError.IllegalOperand => {
+                            stderr.print("{s}:{}: error: illegal operand\n", .{
+                                file_path,
+                                jix.error_context.illegal_operand.line_number,
+                            }) catch unreachable;
+                            process.exit(1);
+                        },
+                        JixError.MissingOperand => {
+                            stderr.print("{s}:{}: error: missing operand\n", .{
+                                file_path,
+                                jix.error_context.missing_operand.line_number,
+                            }) catch unreachable;
+                            process.exit(1);
+                        },
+                        else => return e,
+                    }
+                };
 
                 if (output_file) |output_file_path| {
                     try jix.saveProgramToFile(output_file_path);

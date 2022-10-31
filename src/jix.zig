@@ -37,6 +37,18 @@ pub const Jix = struct {
     ip: InstAddr = 0,
     context: AsmContext,
 
+    error_context: union {
+        illegal_inst: struct {
+            line_number: usize,
+        },
+        illegal_operand: struct {
+            line_number: usize,
+        },
+        missing_operand: struct {
+            line_number: usize,
+        },
+    } = undefined,
+
     halt: bool = false,
 
     const Self = @This();
@@ -70,7 +82,10 @@ pub const Jix = struct {
         defer self.allocator.free(source);
 
         var lines = mem.split(u8, source, "\n");
+        var line_number: usize = 0;
         while (lines.next()) |o_line| {
+            line_number += 1;
+
             if (o_line.len < 1) continue;
 
             var line_c = mem.split(u8, mem.trim(u8, o_line, &ascii.spaces), ";");
@@ -99,7 +114,12 @@ pub const Jix = struct {
                         const t_operand = mem.trim(u8, operand, &ascii.spaces);
 
                         if (ascii.isDigit(t_operand[0])) {
-                            const n_operand = fmt.parseInt(u64, t_operand, 10) catch return JixError.IllegalOperand;
+                            const n_operand = fmt.parseInt(u64, t_operand, 10) catch {
+                                self.error_context = .{ .illegal_operand = .{
+                                    .line_number = line_number,
+                                } };
+                                return JixError.IllegalOperand;
+                            };
                             try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = n_operand } });
                         } else {
                             try self.context.deferred_operands.push(.{
@@ -109,7 +129,12 @@ pub const Jix = struct {
 
                             try self.program.push(.{ .@"type" = inst_type });
                         }
-                    } else return JixError.MissingOperand;
+                    } else {
+                        self.error_context = .{ .missing_operand = .{
+                            .line_number = line_number,
+                        } };
+                        return JixError.MissingOperand;
+                    }
                 } else if (inst_type == .push) {
                     if (parts.next()) |operand| {
                         const t_operand = mem.trim(u8, operand, &ascii.spaces);
@@ -119,22 +144,45 @@ pub const Jix = struct {
                             if (fmt.parseFloat(f64, t_operand)) |f_operand| {
                                 try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_f64 = f_operand } });
                             } else |_| {
+                                self.error_context = .{ .illegal_operand = .{
+                                    .line_number = line_number,
+                                } };
                                 return JixError.IllegalOperand;
                             }
                         }
-                    } else return JixError.MissingOperand;
+                    } else {
+                        self.error_context = .{ .missing_operand = .{
+                            .line_number = line_number,
+                        } };
+                        return JixError.MissingOperand;
+                    }
                 } else {
                     if (InstHasOperand.get(inst_name).?) {
                         if (parts.next()) |operand| {
                             const t_operand = mem.trim(u8, operand, &ascii.spaces);
-                            const n_operand = fmt.parseInt(u64, t_operand, 10) catch return JixError.IllegalOperand;
+                            const n_operand = fmt.parseInt(u64, t_operand, 10) catch {
+                                self.error_context = .{ .illegal_operand = .{
+                                    .line_number = line_number,
+                                } };
+                                return JixError.IllegalOperand;
+                            };
                             try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = n_operand } });
-                        } else return JixError.MissingOperand;
+                        } else {
+                            self.error_context = .{ .missing_operand = .{
+                                .line_number = line_number,
+                            } };
+                            return JixError.MissingOperand;
+                        }
                     } else {
                         try self.program.push(.{ .@"type" = inst_type });
                     }
                 }
-            } else return JixError.IllegalInst;
+            } else {
+                self.error_context = .{ .illegal_inst = .{
+                    .line_number = line_number,
+                } };
+                return JixError.IllegalInst;
+            }
         }
 
         for (self.context.deferred_operands.items()) |deferred_operand| {
