@@ -21,7 +21,7 @@ pub const InstType = enum {
     halt,
 };
 
-pub const Inst = packed struct {
+pub const Inst = struct {
     @"type": InstType,
     operand: Word = undefined,
 };

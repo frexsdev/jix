@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inst = @import("inst.zig").Inst;
 const io = std.io;
 const mem = std.mem;
 const process = std.process;
@@ -155,7 +156,12 @@ pub fn main() !void {
                 for (jix.program.items()) |inst| {
                     const inst_name = @tagName(inst.@"type");
                     if (InstHasOperand.get(inst_name).?)
-                        stdout.print("{s} {}\n", .{ inst_name, inst.operand }) catch unreachable
+                        switch (inst.operand) {
+                            .as_u64 => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
+                            .as_i64 => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
+                            .as_f64 => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
+                            .as_ptr => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
+                        }
                     else
                         stdout.print("{s}\n", .{inst_name}) catch unreachable;
                 }

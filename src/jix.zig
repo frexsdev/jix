@@ -19,7 +19,14 @@ const InstHasOperand = @import("inst.zig").InstHasOperand;
 const stdout = io.getStdOut().writer();
 const stderr = io.getStdErr().writer();
 
-pub const Word = i64;
+pub const InstAddr = usize;
+
+pub const Word = union(enum) {
+    as_u64: u64,
+    as_i64: i64,
+    as_f64: f64,
+    as_ptr: *anyopaque,
+};
 
 pub const Jix = struct {
     allocator: Allocator,
@@ -27,7 +34,7 @@ pub const Jix = struct {
     stack: Array(Word),
 
     program: Array(Inst),
-    ip: Word = 0,
+    ip: InstAddr = 0,
     context: AsmContext,
 
     halt: bool = false,
@@ -92,8 +99,8 @@ pub const Jix = struct {
                         const t_operand = mem.trim(u8, operand, &ascii.spaces);
 
                         if (ascii.isDigit(t_operand[0])) {
-                            const n_operand = fmt.parseInt(Word, t_operand, 10) catch return JixError.IllegalOperand;
-                            try self.program.push(.{ .@"type" = inst_type, .operand = n_operand });
+                            const n_operand = fmt.parseInt(u64, t_operand, 10) catch return JixError.IllegalOperand;
+                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = n_operand } });
                         } else {
                             try self.context.deferred_operands.push(.{
                                 .addr = self.program.size(),
@@ -107,8 +114,8 @@ pub const Jix = struct {
                     if (InstHasOperand.get(inst_name).?) {
                         if (parts.next()) |operand| {
                             const t_operand = mem.trim(u8, operand, &ascii.spaces);
-                            const n_operand = fmt.parseInt(Word, t_operand, 10) catch return JixError.IllegalOperand;
-                            try self.program.push(.{ .@"type" = inst_type, .operand = n_operand });
+                            const n_operand = fmt.parseInt(u64, t_operand, 10) catch return JixError.IllegalOperand;
+                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = n_operand } });
                         } else return JixError.MissingOperand;
                     } else {
                         try self.program.push(.{ .@"type" = inst_type });
@@ -119,7 +126,7 @@ pub const Jix = struct {
 
         for (self.context.deferred_operands.items()) |deferred_operand| {
             if (self.context.find(deferred_operand.label)) |addr|
-                self.program.items()[deferred_operand.addr].operand = @intCast(Word, addr)
+                self.program.items()[deferred_operand.addr].operand = .{ .as_u64 = addr }
             else
                 return JixError.UnknownLabel;
         }
@@ -135,14 +142,14 @@ pub const Jix = struct {
             }
         }
 
-        self.dump(stdout);
+        self.dumpStack(stdout);
     }
 
     pub fn executeInst(self: *Self) JixError!void {
-        if (self.ip < 0 or self.ip >= self.program.size())
+        if (self.ip >= self.program.size())
             return JixError.IllegalInstAccess;
 
-        const inst = self.program.get(@intCast(usize, self.ip));
+        const inst = self.program.get(self.ip);
 
         switch (inst.@"type") {
             // stack
@@ -152,73 +159,70 @@ pub const Jix = struct {
                 self.ip += 1;
             },
             .dup => {
-                if (@intCast(i64, self.stack.size()) - inst.operand <= 0)
+                if (self.stack.size() - inst.operand.as_u64 <= 0)
                     return JixError.StackUnderflow;
 
-                if (inst.operand < 0)
-                    return JixError.IllegalOperand;
-
-                try self.stack.push(self.stack.get(self.stack.size() - 1 - @intCast(usize, inst.operand)));
+                try self.stack.push(self.stack.get(self.stack.size() - 1 - inst.operand.as_u64));
 
                 self.ip += 1;
             },
 
             // arithmetics
             .plus => {
-                const a = try self.stack.pop();
-                const b = try self.stack.pop();
+                const a = (try self.stack.pop()).as_u64;
+                const b = (try self.stack.pop()).as_u64;
 
-                var result: Word = undefined;
-                if (@addWithOverflow(Word, b, a, &result))
+                var result: u64 = undefined;
+                if (@addWithOverflow(u64, b, a, &result))
                     return JixError.IntegerOverflow
                 else
-                    try self.stack.push(result);
+                    try self.stack.push(.{ .as_u64 = result });
 
                 self.ip += 1;
             },
             .minus => {
-                const a = try self.stack.pop();
-                const b = try self.stack.pop();
-                var result: Word = undefined;
-                if (@subWithOverflow(Word, b, a, &result))
+                const a = (try self.stack.pop()).as_u64;
+                const b = (try self.stack.pop()).as_u64;
+                var result: u64 = undefined;
+                if (@subWithOverflow(u64, b, a, &result))
                     return JixError.IntegerOverflow
                 else
-                    try self.stack.push(result);
+                    try self.stack.push(.{ .as_u64 = result });
 
                 self.ip += 1;
             },
             .mult => {
-                const a = try self.stack.pop();
-                const b = try self.stack.pop();
-                var result: Word = undefined;
-                if (@mulWithOverflow(Word, b, a, &result))
+                const a = (try self.stack.pop()).as_u64;
+                const b = (try self.stack.pop()).as_u64;
+                var result: u64 = undefined;
+                if (@mulWithOverflow(u64, b, a, &result))
                     return JixError.IntegerOverflow
                 else
-                    try self.stack.push(result);
+                    try self.stack.push(.{ .as_u64 = result });
 
                 self.ip += 1;
             },
             .div => {
-                const a = try self.stack.pop();
-                const b = try self.stack.pop();
-                try self.stack.push(math.divExact(Word, b, a) catch return JixError.DivByZero);
+                const a = (try self.stack.pop()).as_u64;
+                const b = (try self.stack.pop()).as_u64;
+                try self.stack.push(.{ .as_u64 = math.divExact(u64, b, a) catch return JixError.DivByZero });
 
                 self.ip += 1;
             },
             .eq => {
-                const a = try self.stack.pop();
-                const b = try self.stack.pop();
-                try self.stack.push(@boolToInt(a == b));
+                const a = (try self.stack.pop()).as_u64;
+                const b = (try self.stack.pop()).as_u64;
+                try self.stack.push(.{ .as_u64 = @boolToInt(a == b) });
 
                 self.ip += 1;
             },
 
             // misc
-            .jmp => self.ip = inst.operand,
+            .jmp => self.ip = inst.operand.as_u64,
             .jmp_if => {
-                const a = try self.stack.pop();
+                const a = (try self.stack.pop()).as_u64;
                 if (a != 0)
-                    self.ip = inst.operand
+                    self.ip = inst.operand.as_u64
                 else
                     self.ip += 1;
             },
@@ -226,18 +230,23 @@ pub const Jix = struct {
         }
     }
 
-    pub fn dump(self: *const Self, writer: Writer) void {
+    pub fn dumpStack(self: *const Self, writer: Writer) void {
         writer.print("Stack:\n", .{}) catch unreachable;
 
         if (self.stack.size() > 0) {
-            var i: usize = 0;
+            var i: InstAddr = 0;
             while (i < self.stack.size()) : (i += 1) {
-                writer.print("  {}\n", .{self.stack.get(i)}) catch unreachable;
+                switch (self.stack.get(i)) {
+                    .as_u64 => |w| writer.print("  {}\n", .{w}) catch unreachable,
+                    .as_i64 => |w| writer.print("  {}\n", .{w}) catch unreachable,
+                    .as_f64 => |w| writer.print("  {}\n", .{w}) catch unreachable,
+                    .as_ptr => |w| writer.print("  {}\n", .{w}) catch unreachable,
+                }
             }
         } else writer.print("  [empty]\n", .{}) catch unreachable;
     }
 
-    pub fn loadProgramFromMemory(self: *Self, program_slice: []const Inst) Allocator.Error!void {
+    pub fn loadProgramFromMemory(self: *Self, program_slice: []const Inst) !void {
         for (program_slice) |inst|
             try self.program.push(inst);
     }
@@ -249,16 +258,12 @@ pub const Jix = struct {
         const f = try fs.openFileAbsolute(absolute_path, .{ .mode = .read_only });
         defer f.close();
 
-        while (true) {
-            const inst = f.reader().readStruct(Inst) catch |e| {
-                if (e == error.EndOfStream)
-                    break
-                else
-                    return e;
-            };
+        var bytes = try f.readToEndAlloc(self.allocator, math.maxInt(usize));
+        defer self.allocator.free(bytes);
 
+        const program = mem.bytesAsSlice(Inst, bytes);
+        for (program) |inst|
             try self.program.push(inst);
-        }
     }
 
     pub fn saveProgramToFile(self: *const Self, file_path: []const u8) !void {
@@ -267,7 +272,6 @@ pub const Jix = struct {
         const f = try cwd.createFile(file_path, .{});
         defer f.close();
 
-        for (self.program.items()) |inst|
-            try f.writer().writeStruct(inst);
+        try f.writeAll(mem.sliceAsBytes(self.program.items()));
     }
 };

@@ -3,14 +3,15 @@ const mem = std.mem;
 const Allocator = std.mem.Allocator;
 const Word = @import("jix.zig").Word;
 const Array = @import("array.zig").Array;
+const InstAddr = @import("jix.zig").InstAddr;
 
 pub const Label = struct {
     name: []const u8,
-    addr: usize,
+    addr: InstAddr,
 };
 
 pub const DeferredOperand = struct {
-    addr: usize,
+    addr: InstAddr,
     label: []const u8,
 };
 
@@ -33,7 +34,7 @@ pub const AsmContext = struct {
         self.* = undefined;
     }
 
-    pub fn find(self: Self, name: []const u8) ?usize {
+    pub fn find(self: Self, name: []const u8) ?InstAddr {
         for (self.labels.items()) |label| {
             if (mem.eql(u8, label.name, name))
                 return label.addr;
