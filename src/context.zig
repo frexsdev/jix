@@ -1,17 +1,18 @@
 const std = @import("std");
-const mem = std.mem;
 const Allocator = std.mem.Allocator;
-const Word = @import("jix.zig").Word;
 const Array = @import("array.zig").Array;
-const InstAddr = @import("jix.zig").InstAddr;
+
+usingnamespace @import("jix.zig");
+
+const Global = @This();
 
 pub const Label = struct {
     name: []const u8,
-    addr: InstAddr,
+    addr: Global.InstAddr,
 };
 
 pub const DeferredOperand = struct {
-    addr: InstAddr,
+    addr: Global.InstAddr,
     label: []const u8,
 };
 
@@ -34,9 +35,9 @@ pub const AsmContext = struct {
         self.* = undefined;
     }
 
-    pub fn find(self: Self, name: []const u8) ?InstAddr {
+    pub fn find(self: Self, name: []const u8) ?Global.InstAddr {
         for (self.labels.items()) |label| {
-            if (mem.eql(u8, label.name, name))
+            if (std.mem.eql(u8, label.name, name))
                 return label.addr;
         }
 
