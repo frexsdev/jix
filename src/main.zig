@@ -1,16 +1,15 @@
 const std = @import("std");
-const io = std.io;
-const mem = std.mem;
-const process = std.process;
 const Writer = std.fs.File.Writer;
 const Jix = @import("jix.zig").Jix;
-const Inst = @import("inst.zig").Inst;
 const JixError = @import("error.zig").JixError;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
-const InstHasOperand = @import("inst.zig").InstHasOperand;
 
-const stdout = io.getStdOut().writer();
-const stderr = io.getStdErr().writer();
+usingnamespace @import("inst.zig");
+
+const stdout = std.io.getStdOut().writer();
+const stderr = std.io.getStdErr().writer();
+
+const Global = @This();
 
 fn usage(writer: Writer, program: []const u8) void {
     writer.print(
@@ -35,46 +34,46 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
-    var args = try process.argsWithAllocator(allocator);
+    var args = try std.process.argsWithAllocator(allocator);
     defer args.deinit();
 
     const program = args.next().?;
 
     if (args.next()) |subcommand| {
-        if (mem.eql(u8, subcommand, "compile")) {
+        if (std.mem.eql(u8, subcommand, "compile")) {
             var input_file: ?[]const u8 = null;
             var run = false;
             var output_file: ?[]const u8 = null;
             var limit: isize = -1;
 
             while (args.next()) |flag| {
-                if (mem.eql(u8, flag, "-r")) {
+                if (std.mem.eql(u8, flag, "-r")) {
                     run = true;
-                } else if (mem.eql(u8, flag, "-o")) {
+                } else if (std.mem.eql(u8, flag, "-o")) {
                     if (args.next()) |file_path| {
                         output_file = file_path;
                     } else {
                         usage(stderr, program);
                         stderr.print("error: output file is not provided\n", .{}) catch unreachable;
-                        process.exit(1);
+                        std.process.exit(1);
                     }
-                } else if (mem.eql(u8, flag, "-l")) {
+                } else if (std.mem.eql(u8, flag, "-l")) {
                     if (args.next()) |limit_str| {
                         limit = std.fmt.parseInt(isize, limit_str, 10) catch {
                             usage(stderr, program);
                             stderr.print("error: the limit should be a number\n", .{}) catch unreachable;
-                            process.exit(1);
+                            std.process.exit(1);
                         };
                     } else {
                         usage(stderr, program);
                         stderr.print("error: limit is not provided\n", .{}) catch unreachable;
-                        process.exit(1);
+                        std.process.exit(1);
                     }
                 } else {
                     if (flag[0] == '-') {
                         usage(stderr, program);
                         stderr.print("error: unknown flag `{s}`\n", .{flag}) catch unreachable;
-                        process.exit(1);
+                        std.process.exit(1);
                     }
 
                     input_file = flag;
@@ -92,21 +91,21 @@ pub fn main() !void {
                                 file_path,
                                 jix.error_context.illegal_inst.line_number,
                             }) catch unreachable;
-                            process.exit(1);
+                            std.process.exit(1);
                         },
                         JixError.IllegalOperand => {
                             stderr.print("{s}:{}: error: illegal operand\n", .{
                                 file_path,
                                 jix.error_context.illegal_operand.line_number,
                             }) catch unreachable;
-                            process.exit(1);
+                            std.process.exit(1);
                         },
                         JixError.MissingOperand => {
                             stderr.print("{s}:{}: error: missing operand\n", .{
                                 file_path,
                                 jix.error_context.missing_operand.line_number,
                             }) catch unreachable;
-                            process.exit(1);
+                            std.process.exit(1);
                         },
                         else => return e,
                     }
@@ -115,7 +114,7 @@ pub fn main() !void {
                 if (output_file) |output_file_path| {
                     try jix.saveProgramToFile(output_file_path);
                 } else {
-                    const output_file_path = try mem.concat(allocator, u8, ([_][]const u8{ file_path[0 .. file_path.len - 4], ".jout" })[0..]);
+                    const output_file_path = try std.mem.concat(allocator, u8, ([_][]const u8{ file_path[0 .. file_path.len - 4], ".jout" })[0..]);
                     defer allocator.free(output_file_path);
 
                     try jix.saveProgramToFile(output_file_path);
@@ -125,30 +124,30 @@ pub fn main() !void {
             } else {
                 usage(stderr, program);
                 stderr.print("error: input file is not provided\n", .{}) catch unreachable;
-                process.exit(1);
+                std.process.exit(1);
             }
-        } else if (mem.eql(u8, subcommand, "run")) {
+        } else if (std.mem.eql(u8, subcommand, "run")) {
             var input_file: ?[]const u8 = null;
             var limit: isize = -1;
 
             while (args.next()) |flag| {
-                if (mem.eql(u8, flag, "-l")) {
+                if (std.mem.eql(u8, flag, "-l")) {
                     if (args.next()) |limit_str| {
                         limit = std.fmt.parseInt(isize, limit_str, 10) catch {
                             usage(stderr, program);
                             stderr.print("error: the limit should be a number\n", .{}) catch unreachable;
-                            process.exit(1);
+                            std.process.exit(1);
                         };
                     } else {
                         usage(stderr, program);
                         stderr.print("error: limit is not provided\n", .{}) catch unreachable;
-                        process.exit(1);
+                        std.process.exit(1);
                     }
                 } else {
                     if (flag[0] == '-') {
                         usage(stderr, program);
                         stderr.print("error: unknown flag `{s}`\n", .{flag}) catch unreachable;
-                        process.exit(1);
+                        std.process.exit(1);
                     }
 
                     input_file = flag;
@@ -164,9 +163,9 @@ pub fn main() !void {
             } else {
                 usage(stderr, program);
                 stderr.print("error: input file is not provided\n", .{}) catch unreachable;
-                process.exit(1);
+                std.process.exit(1);
             }
-        } else if (mem.eql(u8, subcommand, "disasm")) {
+        } else if (std.mem.eql(u8, subcommand, "disasm")) {
             var input_file: ?[]const u8 = null;
 
             while (args.next()) |flag| {
@@ -181,7 +180,7 @@ pub fn main() !void {
 
                 for (jix.program.items()) |inst| {
                     const inst_name = @tagName(inst.@"type");
-                    if (InstHasOperand.get(inst_name).?)
+                    if (Global.InstHasOperand.get(inst_name).?)
                         switch (inst.operand) {
                             .as_u64 => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
                             .as_i64 => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
@@ -194,18 +193,18 @@ pub fn main() !void {
             } else {
                 usage(stderr, program);
                 stderr.print("error: input file is not provided\n", .{}) catch unreachable;
-                process.exit(1);
+                std.process.exit(1);
             }
-        } else if (mem.eql(u8, subcommand, "--help") or mem.eql(u8, subcommand, "-h")) {
+        } else if (std.mem.eql(u8, subcommand, "--help") or std.mem.eql(u8, subcommand, "-h")) {
             usage(stdout, program);
         } else {
             usage(stderr, program);
             stderr.print("error: unknown subcommand `{s}`\n", .{subcommand}) catch unreachable;
-            process.exit(1);
+            std.process.exit(1);
         }
     } else {
         usage(stderr, program);
         stderr.print("error: no subcommand provided\n", .{}) catch unreachable;
-        process.exit(1);
+        std.process.exit(1);
     }
 }
