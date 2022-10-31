@@ -72,44 +72,49 @@ pub const Jix = struct {
             if (line.len < 1) continue;
 
             var parts = mem.split(u8, line, " ");
-            const inst_name = mem.trim(u8, parts.next().?, &ascii.spaces);
+            var inst_name = mem.trim(u8, parts.next().?, &ascii.spaces);
 
             if (inst_name[inst_name.len - 1] == ':') {
                 try self.context.labels.push(.{
                     .name = mem.trim(u8, inst_name[0 .. inst_name.len - 1], &ascii.spaces),
                     .addr = self.program.size(),
                 });
-            } else {
-                if (InstFromString.get(inst_name)) |inst_type| {
-                    if (inst_type == .jmp or inst_type == .jmp_if) {
-                        if (parts.next()) |operand| {
-                            const t_operand = mem.trim(u8, operand, &ascii.spaces);
 
-                            if (ascii.isDigit(t_operand[0])) {
-                                const n_operand = fmt.parseInt(Word, t_operand, 10) catch return JixError.IllegalOperand;
-                                try self.program.push(.{ .@"type" = inst_type, .operand = n_operand });
-                            } else {
-                                try self.context.deferred_operands.push(.{
-                                    .addr = self.program.size(),
-                                    .label = t_operand,
-                                });
+                if (parts.next()) |after_label|
+                    inst_name = mem.trim(u8, after_label, &ascii.spaces)
+                else
+                    continue;
+            }
 
-                                try self.program.push(.{ .@"type" = inst_type });
-                            }
-                        } else return JixError.MissingOperand;
-                    } else {
-                        if (InstHasOperand.get(inst_name).?) {
-                            if (parts.next()) |operand| {
-                                const t_operand = mem.trim(u8, operand, &ascii.spaces);
-                                const n_operand = fmt.parseInt(Word, t_operand, 10) catch return JixError.IllegalOperand;
-                                try self.program.push(.{ .@"type" = inst_type, .operand = n_operand });
-                            } else return JixError.MissingOperand;
+            if (InstFromString.get(inst_name)) |inst_type| {
+                if (inst_type == .jmp or inst_type == .jmp_if) {
+                    if (parts.next()) |operand| {
+                        const t_operand = mem.trim(u8, operand, &ascii.spaces);
+
+                        if (ascii.isDigit(t_operand[0])) {
+                            const n_operand = fmt.parseInt(Word, t_operand, 10) catch return JixError.IllegalOperand;
+                            try self.program.push(.{ .@"type" = inst_type, .operand = n_operand });
                         } else {
+                            try self.context.deferred_operands.push(.{
+                                .addr = self.program.size(),
+                                .label = t_operand,
+                            });
+
                             try self.program.push(.{ .@"type" = inst_type });
                         }
+                    } else return JixError.MissingOperand;
+                } else {
+                    if (InstHasOperand.get(inst_name).?) {
+                        if (parts.next()) |operand| {
+                            const t_operand = mem.trim(u8, operand, &ascii.spaces);
+                            const n_operand = fmt.parseInt(Word, t_operand, 10) catch return JixError.IllegalOperand;
+                            try self.program.push(.{ .@"type" = inst_type, .operand = n_operand });
+                        } else return JixError.MissingOperand;
+                    } else {
+                        try self.program.push(.{ .@"type" = inst_type });
                     }
-                } else return JixError.IllegalInst;
-            }
+                }
+            } else return JixError.IllegalInst;
         }
 
         for (self.context.deferred_operands.items()) |deferred_operand| {
