@@ -1,0 +1,35 @@
+	push 4.
+	push 3.
+	push 750000
+loop:
+	swap 2
+
+    push 4.
+    dup 2
+    push 2.
+    plusf
+    swap 3
+
+    divf
+    minusf
+
+    push 4.
+    dup 2
+    push 2.
+    plusf
+    swap 3
+
+    divf
+    plusf
+
+    swap 2
+    push 1
+    minusi
+
+    dup 0
+    jmp_if loop
+	
+	drop
+	drop
+
+	halt
