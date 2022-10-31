@@ -9,10 +9,18 @@ pub const InstType = enum {
     dup,
 
     // arithmetics
-    plus,
-    minus,
-    mult,
-    div,
+    plusi,
+    plusf,
+
+    minusi,
+    minusf,
+
+    multi,
+    multf,
+
+    divi,
+    divf,
+
     eq,
 
     // misc
@@ -32,10 +40,18 @@ pub const InstFromString = ComptimeStringMap(InstType, .{
     .{ "dup", .dup },
 
     // arithmetics
-    .{ "plus", .plus },
-    .{ "minus", .minus },
-    .{ "mult", .mult },
-    .{ "div", .div },
+    .{ "plusi", .plusi },
+    .{ "plusf", .plusf },
+
+    .{ "minusi", .minusi },
+    .{ "minusf", .minusf },
+
+    .{ "multi", .multi },
+    .{ "multf", .multf },
+
+    .{ "divi", .divi },
+    .{ "divf", .divf },
+
     .{ "eq", .eq },
 
     // misc
@@ -50,10 +66,18 @@ pub const InstHasOperand = ComptimeStringMap(bool, .{
     .{ "dup", true },
 
     // arithmetics
-    .{ "plus", false },
-    .{ "minus", false },
-    .{ "mult", false },
-    .{ "div", false },
+    .{ "plusi", false },
+    .{ "plusf", false },
+
+    .{ "minusi", false },
+    .{ "minusf", false },
+
+    .{ "multi", false },
+    .{ "multf", false },
+
+    .{ "divi", false },
+    .{ "divf", false },
+
     .{ "eq", false },
 
     // misc

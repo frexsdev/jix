@@ -4,5 +4,5 @@
 loop: 
 	dup 1			; The loop
 	dup 1
-	plus
+	plusi
 	jmp loop		; Repeat

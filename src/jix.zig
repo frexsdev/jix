@@ -110,6 +110,19 @@ pub const Jix = struct {
                             try self.program.push(.{ .@"type" = inst_type });
                         }
                     } else return JixError.MissingOperand;
+                } else if (inst_type == .push) {
+                    if (parts.next()) |operand| {
+                        const t_operand = mem.trim(u8, operand, &ascii.spaces);
+                        if (fmt.parseInt(u64, t_operand, 10)) |i_operand| {
+                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = i_operand } });
+                        } else |_| {
+                            if (fmt.parseFloat(f64, t_operand)) |f_operand| {
+                                try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_f64 = f_operand } });
+                            } else |_| {
+                                return JixError.IllegalOperand;
+                            }
+                        }
+                    } else return JixError.MissingOperand;
                 } else {
                     if (InstHasOperand.get(inst_name).?) {
                         if (parts.next()) |operand| {
@@ -168,7 +181,7 @@ pub const Jix = struct {
             },
 
             // arithmetics
-            .plus => {
+            .plusi => {
                 const a = (try self.stack.pop()).as_u64;
                 const b = (try self.stack.pop()).as_u64;
 
@@ -180,7 +193,15 @@ pub const Jix = struct {
 
                 self.ip += 1;
             },
-            .minus => {
+            .plusf => {
+                const a = (try self.stack.pop()).as_f64;
+                const b = (try self.stack.pop()).as_f64;
+                try self.stack.push(.{ .as_f64 = b + a });
+
+                self.ip += 1;
+            },
+
+            .minusi => {
                 const a = (try self.stack.pop()).as_u64;
                 const b = (try self.stack.pop()).as_u64;
                 var result: u64 = undefined;
@@ -191,7 +212,15 @@ pub const Jix = struct {
 
                 self.ip += 1;
             },
-            .mult => {
+            .minusf => {
+                const a = (try self.stack.pop()).as_f64;
+                const b = (try self.stack.pop()).as_f64;
+                try self.stack.push(.{ .as_f64 = b - a });
+
+                self.ip += 1;
+            },
+
+            .multi => {
                 const a = (try self.stack.pop()).as_u64;
                 const b = (try self.stack.pop()).as_u64;
                 var result: u64 = undefined;
@@ -202,13 +231,29 @@ pub const Jix = struct {
 
                 self.ip += 1;
             },
-            .div => {
+            .multf => {
+                const a = (try self.stack.pop()).as_f64;
+                const b = (try self.stack.pop()).as_f64;
+                try self.stack.push(.{ .as_f64 = b * a });
+
+                self.ip += 1;
+            },
+
+            .divi => {
                 const a = (try self.stack.pop()).as_u64;
                 const b = (try self.stack.pop()).as_u64;
                 try self.stack.push(.{ .as_u64 = math.divExact(u64, b, a) catch return JixError.DivByZero });
 
                 self.ip += 1;
             },
+            .divf => {
+                const a = (try self.stack.pop()).as_f64;
+                const b = (try self.stack.pop()).as_f64;
+                try self.stack.push(.{ .as_f64 = math.divExact(f64, b, a) catch return JixError.DivByZero });
+
+                self.ip += 1;
+            },
+
             .eq => {
                 const a = (try self.stack.pop()).as_u64;
                 const b = (try self.stack.pop()).as_u64;
