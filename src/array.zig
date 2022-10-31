@@ -31,16 +31,20 @@ pub fn Array(comptime T: type) type {
                 return JixError.StackUnderflow;
         }
 
-        pub fn size(self: *const Self) usize {
+        pub fn size(self: Self) usize {
             return self.list.items.len;
         }
 
-        pub fn items(self: *const Self) []T {
+        pub fn items(self: Self) []T {
             return self.list.items;
         }
 
-        pub fn get(self: *const Self, index: usize) T {
+        pub fn get(self: Self, index: usize) T {
             return self.list.items[index];
+        }
+
+        pub fn reset(self: *Self) void {
+            self.list.items.len = 0;
         }
     };
 }

@@ -12,6 +12,7 @@ const Inst = @import("inst.zig").Inst;
 const Array = @import("array.zig").Array;
 const InstType = @import("inst.zig").InstType;
 const JixError = @import("error.zig").JixError;
+const AsmContext = @import("context.zig").AsmContext;
 const InstFromString = @import("inst.zig").InstFromString;
 const InstHasOperand = @import("inst.zig").InstHasOperand;
 
@@ -27,6 +28,7 @@ pub const Jix = struct {
 
     program: Array(Inst),
     ip: Word = 0,
+    context: AsmContext,
 
     halt: bool = false,
 
@@ -37,16 +39,20 @@ pub const Jix = struct {
             .allocator = allocator,
             .stack = Array(Word).init(allocator),
             .program = Array(Inst).init(allocator),
+            .context = AsmContext.init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.stack.deinit();
         self.program.deinit();
+        self.context.deinit();
         self.* = undefined;
     }
 
     pub fn translateAsm(self: *Self, file_path: []const u8) !void {
+        self.program.reset();
+
         var absolute_path = try fs.realpathAlloc(self.allocator, file_path);
         defer self.allocator.free(absolute_path);
 
@@ -68,17 +74,42 @@ pub const Jix = struct {
             var parts = mem.split(u8, line, " ");
             const inst_name = mem.trim(u8, parts.next().?, &ascii.spaces);
 
-            if (InstFromString.get(inst_name)) |inst_type| {
-                if (InstHasOperand.get(inst_name).?) {
-                    const operand = mem.trim(u8, parts.next().?, &ascii.spaces);
-                    const num_operand = fmt.parseInt(Word, operand, 10) catch return JixError.IllegalOperand;
-                    try self.program.push(.{ .@"type" = inst_type, .operand = num_operand });
-                } else {
-                    try self.program.push(.{ .@"type" = inst_type });
-                }
+            if (inst_name[inst_name.len - 1] == ':') {
+                try self.context.labels.push(.{
+                    .name = mem.trim(u8, inst_name[0 .. inst_name.len - 1], &ascii.spaces),
+                    .addr = self.program.size(),
+                });
             } else {
-                return JixError.IllegalInst;
+                if (InstFromString.get(inst_name)) |inst_type| {
+                    if (inst_type == .jmp or inst_type == .jmp_if) {
+                        if (parts.next()) |operand| {
+                            try self.context.deferred_operands.push(.{
+                                .addr = self.program.size(),
+                                .label = mem.trim(u8, operand, &ascii.spaces),
+                            });
+
+                            try self.program.push(.{ .@"type" = inst_type });
+                        } else return JixError.MissingOperand;
+                    } else {
+                        if (InstHasOperand.get(inst_name).?) {
+                            if (parts.next()) |operand| {
+                                const t_operand = mem.trim(u8, operand, &ascii.spaces);
+                                const n_operand = fmt.parseInt(Word, t_operand, 10) catch return JixError.IllegalOperand;
+                                try self.program.push(.{ .@"type" = inst_type, .operand = n_operand });
+                            } else return JixError.MissingOperand;
+                        } else {
+                            try self.program.push(.{ .@"type" = inst_type });
+                        }
+                    }
+                } else return JixError.IllegalInst;
             }
+        }
+
+        for (self.context.deferred_operands.items()) |deferred_operand| {
+            if (self.context.find(deferred_operand.label)) |addr|
+                self.program.items()[deferred_operand.addr].operand = @intCast(Word, addr)
+            else
+                return JixError.UnknownLabel;
         }
     }
 
