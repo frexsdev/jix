@@ -185,7 +185,7 @@ pub fn main() !void {
                         switch (inst.operand) {
                             .as_u64 => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
                             .as_i64 => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
-                            .as_f64 => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
+                            .as_f64 => |w| stdout.print("{s} {d}\n", .{ inst_name, w }) catch unreachable,
                             .as_ptr => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
                         }
                     else

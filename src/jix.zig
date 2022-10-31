@@ -365,7 +365,7 @@ pub const Jix = struct {
                     self.ip += 1;
             },
             .call => {
-                try self.stack.push(.{ .as_u64 = self.ip });
+                try self.stack.push(.{ .as_u64 = self.ip + 1 });
                 self.ip = inst.operand.as_u64;
             },
             .ret => {
@@ -385,7 +385,7 @@ pub const Jix = struct {
                 switch (self.stack.get(i)) {
                     .as_u64 => |w| writer.print("  {}\n", .{w}) catch unreachable,
                     .as_i64 => |w| writer.print("  {}\n", .{w}) catch unreachable,
-                    .as_f64 => |w| writer.print("  {}\n", .{w}) catch unreachable,
+                    .as_f64 => |w| writer.print("  {d}\n", .{w}) catch unreachable,
                     .as_ptr => |w| writer.print("  {}\n", .{w}) catch unreachable,
                 }
             }

@@ -1,0 +1,36 @@
+jmp main
+
+lerpf:
+	dup 3
+	dup 3
+	dup 1
+	minusf
+	dup 3
+	multf
+	plusf
+	
+	swap 2
+	drop
+	swap 2
+	drop
+	swap 2
+	drop
+	ret
+	
+main:
+	push 69.
+	push 420.
+	push 0.
+	call lerpf
+
+	push 69.
+	push 420.
+	push 1.
+	call lerpf
+
+	push 69.
+	push 420.
+	push 0.5
+	call lerpf
+
+	halt
