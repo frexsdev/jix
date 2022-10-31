@@ -109,7 +109,7 @@ pub const Jix = struct {
             }
 
             if (InstFromString.get(inst_name)) |inst_type| {
-                if (inst_type == .jmp or inst_type == .jmp_if) {
+                if (inst_type == .jmp or inst_type == .jmp_if or inst_type == .call) {
                     if (parts.next()) |operand| {
                         const t_operand = mem.trim(u8, operand, &ascii.spaces);
 
@@ -363,6 +363,10 @@ pub const Jix = struct {
                     self.ip = inst.operand.as_u64
                 else
                     self.ip += 1;
+            },
+            .call => {
+                try self.stack.push(.{ .as_u64 = self.ip });
+                self.ip = inst.operand.as_u64;
             },
             .ret => {
                 const a = (try self.stack.pop()).as_u64;
