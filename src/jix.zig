@@ -60,25 +60,37 @@ pub const Jix = struct {
         while (lines.next()) |o_line| {
             if (o_line.len < 1) continue;
 
-            const line = mem.trim(u8, o_line, &ascii.spaces);
+            var line_c = mem.split(u8, mem.trim(u8, o_line, &ascii.spaces), ";");
+            const line = line_c.next().?;
+
+            if (line.len < 1) continue;
+
             var parts = mem.split(u8, line, " ");
-            const inst_name = parts.next().?;
+            const inst_name = mem.trim(u8, parts.next().?, &ascii.spaces);
 
             if (InstFromString.get(inst_name)) |inst_type| {
                 if (InstHasOperand.get(inst_name).?) {
-                    const operand = fmt.parseInt(Word, parts.next().?, 10) catch return JixError.IllegalOperand;
-                    try self.program.push(.{ .@"type" = inst_type, .operand = operand });
+                    const operand = mem.trim(u8, parts.next().?, &ascii.spaces);
+                    const num_operand = fmt.parseInt(Word, operand, 10) catch return JixError.IllegalOperand;
+                    try self.program.push(.{ .@"type" = inst_type, .operand = num_operand });
                 } else {
                     try self.program.push(.{ .@"type" = inst_type });
                 }
+            } else {
+                return JixError.IllegalInst;
             }
         }
     }
 
-    pub fn executeProgram(self: *Self) JixError!void {
-        var i: usize = 0;
-        while (i < 69 and !self.halt) : (i += 1)
+    pub fn executeProgram(self: *Self, limit: isize) JixError!void {
+        var m_limit = limit;
+        while (m_limit != 0 and !self.halt) {
             try self.executeInst();
+
+            if (m_limit > 0) {
+                m_limit -= 1;
+            }
+        }
 
         self.dump(stdout);
     }
@@ -112,21 +124,34 @@ pub const Jix = struct {
             .plus => {
                 const a = try self.stack.pop();
                 const b = try self.stack.pop();
-                try self.stack.push(b + a);
+
+                var result: Word = undefined;
+                if (@addWithOverflow(Word, b, a, &result))
+                    return JixError.IntegerOverflow
+                else
+                    try self.stack.push(result);
 
                 self.ip += 1;
             },
             .minus => {
                 const a = try self.stack.pop();
                 const b = try self.stack.pop();
-                try self.stack.push(b - a);
+                var result: Word = undefined;
+                if (@subWithOverflow(Word, b, a, &result))
+                    return JixError.IntegerOverflow
+                else
+                    try self.stack.push(result);
 
                 self.ip += 1;
             },
             .mult => {
                 const a = try self.stack.pop();
                 const b = try self.stack.pop();
-                try self.stack.push(b * a);
+                var result: Word = undefined;
+                if (@mulWithOverflow(Word, b, a, &result))
+                    return JixError.IntegerOverflow
+                else
+                    try self.stack.push(result);
 
                 self.ip += 1;
             },

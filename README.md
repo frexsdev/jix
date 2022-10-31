@@ -3,5 +3,5 @@
 ## Quick Start
 
 ```sh
-$ zig build run -- compile -r ./examples/fib.jix
+$ zig build run -- compile -r ./examples/fib.jix -l 69
 ```

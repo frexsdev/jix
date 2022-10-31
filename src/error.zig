@@ -1,1 +1,1 @@
-pub const JixError = error{ StackOverflow, StackUnderflow, IllegalInstAccess, DivByZero, IllegalOperand };
+pub const JixError = error{ StackOverflow, StackUnderflow, IllegalInst, IllegalInstAccess, DivByZero, IllegalOperand, IntegerOverflow };
