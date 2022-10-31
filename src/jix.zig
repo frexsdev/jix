@@ -1,23 +1,16 @@
 const std = @import("std");
-const io = std.io;
-const fs = std.fs;
-const fmt = std.fmt;
-const mem = std.mem;
-const log = std.log;
-const math = std.math;
-const ascii = std.ascii;
 const Writer = std.fs.File.Writer;
 const Allocator = std.mem.Allocator;
-const Inst = @import("inst.zig").Inst;
 const Array = @import("array.zig").Array;
-const InstType = @import("inst.zig").InstType;
 const JixError = @import("error.zig").JixError;
 const AsmContext = @import("context.zig").AsmContext;
-const InstFromString = @import("inst.zig").InstFromString;
-const InstHasOperand = @import("inst.zig").InstHasOperand;
 
-const stdout = io.getStdOut().writer();
-const stderr = io.getStdErr().writer();
+usingnamespace @import("inst.zig");
+
+const stdout = std.io.getStdOut().writer();
+const stderr = std.io.getStdErr().writer();
+
+const Global = @This();
 
 pub const InstAddr = usize;
 
@@ -33,7 +26,7 @@ pub const Jix = struct {
 
     stack: Array(Word),
 
-    program: Array(Inst),
+    program: Array(Global.Inst),
     ip: InstAddr = 0,
     context: AsmContext,
 
@@ -57,7 +50,7 @@ pub const Jix = struct {
         return .{
             .allocator = allocator,
             .stack = Array(Word).init(allocator),
-            .program = Array(Inst).init(allocator),
+            .program = Array(Global.Inst).init(allocator),
             .context = AsmContext.init(allocator),
         };
     }
@@ -72,49 +65,49 @@ pub const Jix = struct {
     pub fn translateAsm(self: *Self, file_path: []const u8) !void {
         self.program.reset();
 
-        var absolute_path = try fs.realpathAlloc(self.allocator, file_path);
+        var absolute_path = try std.fs.realpathAlloc(self.allocator, file_path);
         defer self.allocator.free(absolute_path);
 
-        const f = try fs.openFileAbsolute(absolute_path, .{ .mode = .read_only });
+        const f = try std.fs.openFileAbsolute(absolute_path, .{ .mode = .read_only });
         defer f.close();
 
-        var source = try f.readToEndAlloc(self.allocator, math.maxInt(usize));
+        var source = try f.readToEndAlloc(self.allocator, std.math.maxInt(usize));
         defer self.allocator.free(source);
 
-        var lines = mem.split(u8, source, "\n");
+        var lines = std.mem.split(u8, source, "\n");
         var line_number: usize = 0;
         while (lines.next()) |o_line| {
             line_number += 1;
 
             if (o_line.len < 1) continue;
 
-            var line_c = mem.split(u8, mem.trim(u8, o_line, &ascii.spaces), ";");
+            var line_c = std.mem.split(u8, std.mem.trim(u8, o_line, &std.ascii.spaces), ";");
             const line = line_c.next().?;
 
             if (line.len < 1) continue;
 
-            var parts = mem.split(u8, line, " ");
-            var inst_name = mem.trim(u8, parts.next().?, &ascii.spaces);
+            var parts = std.mem.split(u8, line, " ");
+            var inst_name = std.mem.trim(u8, parts.next().?, &std.ascii.spaces);
 
             if (inst_name[inst_name.len - 1] == ':') {
                 try self.context.labels.push(.{
-                    .name = mem.trim(u8, inst_name[0 .. inst_name.len - 1], &ascii.spaces),
+                    .name = std.mem.trim(u8, inst_name[0 .. inst_name.len - 1], &std.ascii.spaces),
                     .addr = self.program.size(),
                 });
 
                 if (parts.next()) |after_label|
-                    inst_name = mem.trim(u8, after_label, &ascii.spaces)
+                    inst_name = std.mem.trim(u8, after_label, &std.ascii.spaces)
                 else
                     continue;
             }
 
-            if (InstFromString.get(inst_name)) |inst_type| {
+            if (Global.InstFromString.get(inst_name)) |inst_type| {
                 if (inst_type == .jmp or inst_type == .jmp_if or inst_type == .call) {
                     if (parts.next()) |operand| {
-                        const t_operand = mem.trim(u8, operand, &ascii.spaces);
+                        const t_operand = std.mem.trim(u8, operand, &std.ascii.spaces);
 
-                        if (ascii.isDigit(t_operand[0])) {
-                            const n_operand = fmt.parseInt(u64, t_operand, 10) catch {
+                        if (std.ascii.isDigit(t_operand[0])) {
+                            const n_operand = std.fmt.parseInt(u64, t_operand, 10) catch {
                                 self.error_context = .{ .illegal_operand = .{
                                     .line_number = line_number,
                                 } };
@@ -137,11 +130,11 @@ pub const Jix = struct {
                     }
                 } else if (inst_type == .push) {
                     if (parts.next()) |operand| {
-                        const t_operand = mem.trim(u8, operand, &ascii.spaces);
-                        if (fmt.parseInt(u64, t_operand, 10)) |i_operand| {
+                        const t_operand = std.mem.trim(u8, operand, &std.ascii.spaces);
+                        if (std.fmt.parseInt(u64, t_operand, 10)) |i_operand| {
                             try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = i_operand } });
                         } else |_| {
-                            if (fmt.parseFloat(f64, t_operand)) |f_operand| {
+                            if (std.fmt.parseFloat(f64, t_operand)) |f_operand| {
                                 try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_f64 = f_operand } });
                             } else |_| {
                                 self.error_context = .{ .illegal_operand = .{
@@ -157,10 +150,10 @@ pub const Jix = struct {
                         return JixError.MissingOperand;
                     }
                 } else {
-                    if (InstHasOperand.get(inst_name).?) {
+                    if (Global.InstHasOperand.get(inst_name).?) {
                         if (parts.next()) |operand| {
-                            const t_operand = mem.trim(u8, operand, &ascii.spaces);
-                            const n_operand = fmt.parseInt(u64, t_operand, 10) catch {
+                            const t_operand = std.mem.trim(u8, operand, &std.ascii.spaces);
+                            const n_operand = std.fmt.parseInt(u64, t_operand, 10) catch {
                                 self.error_context = .{ .illegal_operand = .{
                                     .line_number = line_number,
                                 } };
@@ -392,32 +385,32 @@ pub const Jix = struct {
         } else writer.print("  [empty]\n", .{}) catch unreachable;
     }
 
-    pub fn loadProgramFromMemory(self: *Self, program_slice: []const Inst) !void {
+    pub fn loadProgramFromMemory(self: *Self, program_slice: []const Global.Inst) !void {
         for (program_slice) |inst|
             try self.program.push(inst);
     }
 
     pub fn loadProgramFromFile(self: *Self, file_path: []const u8) !void {
-        var absolute_path = try fs.realpathAlloc(self.allocator, file_path);
+        var absolute_path = try std.fs.realpathAlloc(self.allocator, file_path);
         defer self.allocator.free(absolute_path);
 
-        const f = try fs.openFileAbsolute(absolute_path, .{ .mode = .read_only });
+        const f = try std.fs.openFileAbsolute(absolute_path, .{ .mode = .read_only });
         defer f.close();
 
-        var bytes = try f.readToEndAlloc(self.allocator, math.maxInt(usize));
+        var bytes = try f.readToEndAlloc(self.allocator, std.math.maxInt(usize));
         defer self.allocator.free(bytes);
 
-        const program = mem.bytesAsSlice(Inst, bytes);
+        const program = std.mem.bytesAsSlice(Global.Inst, bytes);
         for (program) |inst|
             try self.program.push(inst);
     }
 
     pub fn saveProgramToFile(self: *const Self, file_path: []const u8) !void {
-        const cwd = fs.cwd();
+        const cwd = std.fs.cwd();
 
         const f = try cwd.createFile(file_path, .{});
         defer f.close();
 
-        try f.writeAll(mem.sliceAsBytes(self.program.items()));
+        try f.writeAll(std.mem.sliceAsBytes(self.program.items()));
     }
 };
