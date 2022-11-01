@@ -28,8 +28,9 @@ loop:
 
     dup 0
     jmp_if loop
-	
+
 	drop
 	drop
+	native 4
 
 	halt

@@ -201,8 +201,6 @@ pub const Jix = struct {
                 m_limit -= 1;
             }
         }
-
-        self.dumpStack(stdout);
     }
 
     pub fn executeInst(self: *Self) JixError!void {

@@ -1,4 +1,4 @@
-jmp main
+	jmp main
 
 lerpf:
 	dup 3
@@ -22,15 +22,18 @@ main:
 	push 420.
 	push 0.
 	call lerpf
-
+	native 4
+	
 	push 69.
 	push 420.
 	push 1.
 	call lerpf
+	native 4
 
 	push 69.
 	push 420.
 	push 0.5
 	call lerpf
+	native 4	
 
 	halt

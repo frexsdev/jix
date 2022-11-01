@@ -27,5 +27,7 @@ loop:
    drop
    swap 1
    drop
+
+   native 4
    
    halt
