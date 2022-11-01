@@ -16,9 +16,14 @@ pub const InstType = enum {
     sub,
     mult,
     div,
-    eq,
-    ge,
     not,
+
+    // comparison
+    eq,
+    gt,
+    get,
+    lt,
+    let,
 
     // misc
     jmp,

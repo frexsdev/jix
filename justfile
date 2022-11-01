@@ -1,12 +1,21 @@
 alias b := build
-alias e := example
-alias es := examples
+alias r := run
 
-build:
-	zig build
+build example='all':
+  if [ '{{example}}' = 'all' ]; then \
+    for file in `ls examples/*.jix`; do \
+      zig build run -- compile $file; \
+    done \
+  else \
+    zig build run -- compile examples/{{example}}.jix; \
+  fi
 
-examples: build
-	find ./examples/ -iname '*.jix' -exec ./zig-out/bin/jix compile -r {} \;
-	
-example EXAMPLE: build
-	./zig-out/bin/jix compile -r ./examples/{{EXAMPLE}}.jix
+run example='all':
+  if [ '{{example}}' = 'all' ]; then \
+    for file in `ls examples/*.jix`; do \
+      echo -e \\n$file:; \
+      zig build run -- compile -r $file; \
+    done \
+  else \
+    zig build run -- compile -r examples/{{example}}.jix; \
+  fi
