@@ -1,8 +1,8 @@
 const std = @import("std");
 const Writer = std.fs.File.Writer;
 const Jix = @import("jix.zig").Jix;
-const Natives = @import("natives.zig");
 const JixError = @import("error.zig").JixError;
+const natives = @import("natives.zig").natives;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 
 usingnamespace @import("inst.zig");
@@ -223,7 +223,6 @@ pub fn main() !void {
 }
 
 fn loadNatives(jix: *Jix) !void {
-    const natives = [_]Natives.JixNative{ Natives.jixAlloc, Natives.jixFree };
     for (&natives) |native, i| {
         try jix.natives.put(i, native);
     }

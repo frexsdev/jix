@@ -2,6 +2,11 @@ const std = @import("std");
 const Jix = @import("jix.zig").Jix;
 const JixError = @import("error.zig").JixError;
 
+pub const natives = [_]JixNative{
+    jixAlloc,
+    jixFree,
+};
+
 pub const JixNative = *const fn (*Jix) JixError!void;
 
 pub fn jixAlloc(jix: *Jix) JixError!void {
