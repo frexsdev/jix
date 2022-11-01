@@ -237,7 +237,7 @@ fn stepDebug(jix: *Jix, limit: isize) !void {
         var inst = try jix.program.get(jix.ip).toString(jix.allocator);
         defer jix.allocator.free(inst);
 
-        stdout.print("{s}\n", .{inst}) catch unreachable;
+        stdout.print("Instruction: {s}\n", .{inst}) catch unreachable;
 
         _ = try stdin.readByte();
 
