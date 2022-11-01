@@ -1,6 +1,6 @@
 	jmp main
 
-lerpf:
+lerp:
 	dup 3
 	dup 3
 	dup 1
@@ -16,24 +16,29 @@ lerpf:
 	swap 2
 	drop
 	ret
-	
+
 main:
 	push 69.
 	push 420.
 	push 0.
-	call lerpf
+	push 1.
+	push 10.
+	div
+loop:
+	dup 3
+	dup 3
+	dup 3
+	call lerp
 	native 2
 	
-	push 69.
-	push 420.
+	swap 1
+	dup 1
+	add
+	swap 1
+	
+	dup 1
 	push 1.
-	call lerpf
-	native 2
+	ge
 
-	push 69.
-	push 420.
-	push 0.5
-	call lerpf
-	native 2	
-
+	jmp_if loop
 	halt

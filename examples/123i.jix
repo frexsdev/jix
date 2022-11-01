@@ -1,8 +1,11 @@
-push 1
-push 2
-push 3
-add
-add
-native 2
-
-halt
+    jmp main
+main:
+    push 1
+    push 2
+    push 3
+    add
+    add
+    native 2
+    
+    halt
+    

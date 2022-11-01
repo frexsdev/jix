@@ -1,5 +1,4 @@
     jmp main
-
 main:
     push 420
     native 0

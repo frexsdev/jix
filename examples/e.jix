@@ -1,33 +1,35 @@
-   push 1.
-   push 1.
-   push 1.
+    jmp main
+main:
+    push 1.
+    push 1.
+    push 1.
 loop:
-   push 1.
-   dup 2
-   div
-   add
+    push 1.
+    dup 2
+    div
+    add
 
-   swap 2
-   push 1.
-   add
-   dup 0
-   swap 2
-   mult
+    swap 2
+    push 1.
+    add
+    dup 0
+    swap 2
+    mult
 
-   swap 1
-   swap 2
+    swap 1
+    swap 2
 
-   dup 2
-   push 100.
-   ge
+    dup 2
+    push 100.
+    ge
 
-   jmp_if loop
+    jmp_if loop
 
-   swap 1
-   drop
-   swap 1
-   drop
+    swap 1
+    drop
+    swap 1
+    drop
 
-   native 2
-   
-   halt
+    native 2
+    
+    halt

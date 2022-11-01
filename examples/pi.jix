@@ -1,3 +1,5 @@
+	jmp main
+main:	
 	push 4.
 	push 3.
 	push 750000
