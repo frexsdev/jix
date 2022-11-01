@@ -4,10 +4,10 @@ lerpf:
 	dup 3
 	dup 3
 	dup 1
-	minusf
+	sub
 	dup 3
-	multf
-	plusf
+	mult
+	add
 	
 	swap 2
 	drop
@@ -22,18 +22,18 @@ main:
 	push 420.
 	push 0.
 	call lerpf
-	native 4
+	native 2
 	
 	push 69.
 	push 420.
 	push 1.
 	call lerpf
-	native 4
+	native 2
 
 	push 69.
 	push 420.
 	push 0.5
 	call lerpf
-	native 4	
+	native 2	
 
 	halt

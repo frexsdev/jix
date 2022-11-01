@@ -7,30 +7,30 @@ loop:
     push 4.
     dup 2
     push 2.
-    plusf
+    add
     swap 3
 
-    divf
-    minusf
+    div
+    sub
 
     push 4.
     dup 2
     push 2.
-    plusf
+    add
     swap 3
 
-    divf
-    plusf
+    div
+    add
 
     swap 2
     push 1
-    minusi
+    sub
 
     dup 0
     jmp_if loop
 
 	drop
 	drop
-	native 4
+	native 2
 
 	halt

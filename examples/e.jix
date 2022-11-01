@@ -4,22 +4,22 @@
 loop:
    push 1.
    dup 2
-   divf
-   plusf
+   div
+   add
 
    swap 2
    push 1.
-   plusf
+   add
    dup 0
    swap 2
-   multf
+   mult
 
    swap 1
    swap 2
 
    dup 2
    push 100.
-   gef
+   ge
 
    jmp_if loop
 
@@ -28,6 +28,6 @@ loop:
    swap 1
    drop
 
-   native 4
+   native 2
    
    halt

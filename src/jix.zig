@@ -241,113 +241,220 @@ pub const Jix = struct {
             },
 
             // arithmetics
-            .plusi => {
-                const a = (try self.stack.pop()).as_u64;
-                const b = (try self.stack.pop()).as_u64;
+            .add => {
+                const a_w = try self.stack.pop();
+                const b_w = try self.stack.pop();
 
-                var result: u64 = undefined;
-                if (@addWithOverflow(u64, b, a, &result))
-                    return JixError.IntegerOverflow
-                else
-                    try self.stack.push(.{ .as_u64 = result });
-
-                self.ip += 1;
-            },
-            .plusf => {
-                const a = (try self.stack.pop()).as_f64;
-                const b = (try self.stack.pop()).as_f64;
-                try self.stack.push(.{ .as_f64 = b + a });
-
-                self.ip += 1;
-            },
-
-            .minusi => {
-                const a = (try self.stack.pop()).as_u64;
-                const b = (try self.stack.pop()).as_u64;
-                var result: u64 = undefined;
-                if (@subWithOverflow(u64, b, a, &result))
-                    return JixError.IntegerOverflow
-                else
-                    try self.stack.push(.{ .as_u64 = result });
-
-                self.ip += 1;
-            },
-            .minusf => {
-                const a = (try self.stack.pop()).as_f64;
-                const b = (try self.stack.pop()).as_f64;
-                try self.stack.push(.{ .as_f64 = b - a });
-
-                self.ip += 1;
-            },
-
-            .multi => {
-                const a = (try self.stack.pop()).as_u64;
-                const b = (try self.stack.pop()).as_u64;
-                var result: u64 = undefined;
-                if (@mulWithOverflow(u64, b, a, &result))
-                    return JixError.IntegerOverflow
-                else
-                    try self.stack.push(.{ .as_u64 = result });
+                switch (a_w) {
+                    .as_i64 => |a| {
+                        switch (b_w) {
+                            .as_i64 => |b| {
+                                var result: i64 = undefined;
+                                if (@addWithOverflow(i64, b, a, &result))
+                                    return JixError.IntegerOverflow
+                                else
+                                    try self.stack.push(.{ .as_i64 = result });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    .as_u64 => |a| {
+                        switch (b_w) {
+                            .as_u64 => |b| {
+                                var result: u64 = undefined;
+                                if (@addWithOverflow(u64, b, a, &result))
+                                    return JixError.IntegerOverflow
+                                else
+                                    try self.stack.push(.{ .as_u64 = result });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    .as_f64 => |a| {
+                        switch (b_w) {
+                            .as_f64 => |b| {
+                                try self.stack.push(.{ .as_f64 = b + a });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    else => return JixError.IllegalOperand,
+                }
 
                 self.ip += 1;
             },
-            .multf => {
-                const a = (try self.stack.pop()).as_f64;
-                const b = (try self.stack.pop()).as_f64;
-                try self.stack.push(.{ .as_f64 = b * a });
+            .sub => {
+                const a_w = try self.stack.pop();
+                const b_w = try self.stack.pop();
+
+                switch (a_w) {
+                    .as_i64 => |a| {
+                        switch (b_w) {
+                            .as_i64 => |b| {
+                                var result: i64 = undefined;
+                                if (@subWithOverflow(i64, b, a, &result))
+                                    return JixError.IntegerOverflow
+                                else
+                                    try self.stack.push(.{ .as_i64 = result });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    .as_u64 => |a| {
+                        switch (b_w) {
+                            .as_u64 => |b| {
+                                var result: u64 = undefined;
+                                if (@subWithOverflow(u64, b, a, &result))
+                                    return JixError.IntegerOverflow
+                                else
+                                    try self.stack.push(.{ .as_u64 = result });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    .as_f64 => |a| {
+                        switch (b_w) {
+                            .as_f64 => |b| {
+                                try self.stack.push(.{ .as_f64 = b - a });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    else => return JixError.IllegalOperand,
+                }
 
                 self.ip += 1;
             },
+            .mult => {
+                const a_w = try self.stack.pop();
+                const b_w = try self.stack.pop();
 
-            .divi => {
-                const a = (try self.stack.pop()).as_u64;
-                const b = (try self.stack.pop()).as_u64;
-
-                if (a == 0 or b == 0)
-                    return JixError.DivByZero;
-
-                try self.stack.push(.{ .as_u64 = b / a });
-
-                self.ip += 1;
-            },
-            .divf => {
-                const a = (try self.stack.pop()).as_f64;
-                const b = (try self.stack.pop()).as_f64;
-
-                if (a == 0 or b == 0)
-                    return JixError.DivByZero;
-
-                try self.stack.push(.{ .as_f64 = b / a });
-
-                self.ip += 1;
-            },
-
-            .eqi => {
-                const a = (try self.stack.pop()).as_u64;
-                const b = (try self.stack.pop()).as_u64;
-                try self.stack.push(.{ .as_u64 = @boolToInt(a == b) });
-
-                self.ip += 1;
-            },
-            .eqf => {
-                const a = (try self.stack.pop()).as_f64;
-                const b = (try self.stack.pop()).as_f64;
-                try self.stack.push(.{ .as_u64 = @boolToInt(a == b) });
-
-                self.ip += 1;
-            },
-
-            .gei => {
-                const a = (try self.stack.pop()).as_u64;
-                const b = (try self.stack.pop()).as_u64;
-                try self.stack.push(.{ .as_u64 = @boolToInt(a >= b) });
+                switch (a_w) {
+                    .as_i64 => |a| {
+                        switch (b_w) {
+                            .as_i64 => |b| {
+                                var result: i64 = undefined;
+                                if (@mulWithOverflow(i64, b, a, &result))
+                                    return JixError.IntegerOverflow
+                                else
+                                    try self.stack.push(.{ .as_i64 = result });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    .as_u64 => |a| {
+                        switch (b_w) {
+                            .as_u64 => |b| {
+                                var result: u64 = undefined;
+                                if (@mulWithOverflow(u64, b, a, &result))
+                                    return JixError.IntegerOverflow
+                                else
+                                    try self.stack.push(.{ .as_u64 = result });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    .as_f64 => |a| {
+                        switch (b_w) {
+                            .as_f64 => |b| {
+                                try self.stack.push(.{ .as_f64 = b * a });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    else => return JixError.IllegalOperand,
+                }
 
                 self.ip += 1;
             },
-            .gef => {
-                const a = (try self.stack.pop()).as_f64;
-                const b = (try self.stack.pop()).as_f64;
-                try self.stack.push(.{ .as_u64 = @boolToInt(a >= b) });
+            .div => {
+                const a_w = try self.stack.pop();
+                const b_w = try self.stack.pop();
+
+                switch (a_w) {
+                    .as_i64 => |a| {
+                        switch (b_w) {
+                            .as_i64 => |b| {
+                                try self.stack.push(.{ .as_i64 = @divExact(b, a) });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    .as_u64 => |a| {
+                        switch (b_w) {
+                            .as_u64 => |b| {
+                                try self.stack.push(.{ .as_u64 = @divExact(b, a) });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    .as_f64 => |a| {
+                        switch (b_w) {
+                            .as_f64 => |b| {
+                                try self.stack.push(.{ .as_f64 = b / a });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    else => return JixError.IllegalOperand,
+                }
+
+                self.ip += 1;
+            },
+            .eq => {
+                const a = try self.stack.pop();
+                const b = try self.stack.pop();
+                try self.stack.push(.{ .as_u64 = @boolToInt(std.meta.eql(a, b)) });
+
+                self.ip += 1;
+            },
+            .ge => {
+                const a_w = try self.stack.pop();
+                const b_w = try self.stack.pop();
+                switch (a_w) {
+                    .as_i64 => |a| {
+                        switch (b_w) {
+                            .as_i64 => |b| {
+                                try self.stack.push(.{ .as_u64 = @boolToInt(a >= b) });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    .as_u64 => |a| {
+                        switch (b_w) {
+                            .as_u64 => |b| {
+                                try self.stack.push(.{ .as_u64 = @boolToInt(a >= b) });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    .as_f64 => |a| {
+                        switch (b_w) {
+                            .as_f64 => |b| {
+                                try self.stack.push(.{ .as_u64 = @boolToInt(a >= b) });
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    else => return JixError.IllegalOperand,
+                }
+
+                self.ip += 1;
+            },
+            .not => {
+                const a_w = try self.stack.pop();
+                switch (a_w) {
+                    .as_i64 => |a| {
+                        try self.stack.push(.{ .as_u64 = @boolToInt(!(a != 0)) });
+                    },
+                    .as_u64 => |a| {
+                        try self.stack.push(.{ .as_u64 = @boolToInt(!(a != 0)) });
+                    },
+                    .as_f64 => |a| {
+                        try self.stack.push(.{ .as_u64 = @boolToInt(!(a != 0)) });
+                    },
+                    else => return JixError.IllegalOperand,
+                }
 
                 self.ip += 1;
             },

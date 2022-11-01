@@ -10,10 +10,7 @@ pub const JixNative = *const fn (*Jix) JixError!void;
 pub const natives = [_]JixNative{
     jixAlloc,
     jixFree,
-    jixPrintI64,
-    jixPrintU64,
-    jixPrintF64,
-    jixPrintPtr,
+    jixPrint,
 };
 
 fn jixAlloc(jix: *Jix) JixError!void {
@@ -26,22 +23,12 @@ fn jixFree(jix: *Jix) JixError!void {
     std.c.free(a);
 }
 
-fn jixPrintI64(jix: *Jix) JixError!void {
-    const a = (try jix.stack.pop()).as_i64;
-    stderr.print("{}\n", .{a}) catch unreachable;
-}
-
-fn jixPrintU64(jix: *Jix) JixError!void {
-    const a = (try jix.stack.pop()).as_u64;
-    stderr.print("{}\n", .{a}) catch unreachable;
-}
-
-fn jixPrintF64(jix: *Jix) JixError!void {
-    const a = (try jix.stack.pop()).as_f64;
-    stderr.print("{d}\n", .{a}) catch unreachable;
-}
-
-fn jixPrintPtr(jix: *Jix) JixError!void {
-    const a = (try jix.stack.pop()).as_ptr;
-    stderr.print("{*}\n", .{a}) catch unreachable;
+fn jixPrint(jix: *Jix) JixError!void {
+    const a_w = try jix.stack.pop();
+    switch (a_w) {
+        .as_i64 => |a| stderr.print("{}\n", .{a}) catch unreachable,
+        .as_u64 => |a| stderr.print("{}\n", .{a}) catch unreachable,
+        .as_f64 => |a| stderr.print("{d}\n", .{a}) catch unreachable,
+        .as_ptr => |a| stderr.print("{*}\n", .{a}) catch unreachable,
+    }
 }

@@ -1,8 +1,24 @@
-; First two Fibonacci numbers
+	jmp main
+main:
 	push 0
 	push 1
-loop: 
-	dup 1			; The loop
+	push 30
+loop:
+	swap 2
+	dup 0
+	native 2
 	dup 1
-	plusi
-	jmp loop		; Repeat
+	add
+	swap 1
+	swap 2
+	push 1
+	sub
+	
+	dup 0
+	push 0
+	eq
+	
+	not
+	
+	jmp_if loop
+	halt

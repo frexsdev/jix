@@ -1,8 +1,8 @@
 push 1.
 push 2.
 push 3.
-plusf
-plusf
-native 4
+add
+add
+native 2
 
 halt

@@ -4,7 +4,7 @@ main:
     push 420
     native 0
     dup 0
-    native 5
+    native 2
     native 1
     
     halt

@@ -12,23 +12,13 @@ pub const InstType = enum {
     drop,
 
     // arithmetics
-    plusi,
-    plusf,
-
-    minusi,
-    minusf,
-
-    multi,
-    multf,
-
-    divi,
-    divf,
-
-    eqi,
-    eqf,
-
-    gei,
-    gef,
+    add,
+    sub,
+    mult,
+    div,
+    eq,
+    ge,
+    not,
 
     // misc
     jmp,
