@@ -1,6 +1,7 @@
 const std = @import("std");
 const Writer = std.fs.File.Writer;
 const Jix = @import("jix.zig").Jix;
+const Natives = @import("natives.zig");
 const JixError = @import("error.zig").JixError;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 
@@ -8,6 +9,7 @@ usingnamespace @import("inst.zig");
 
 const stdout = std.io.getStdOut().writer();
 const stderr = std.io.getStdErr().writer();
+const stdin = std.io.getStdIn().reader();
 
 const Global = @This();
 
@@ -21,9 +23,9 @@ fn usage(writer: Writer, program: []const u8) void {
         \\  -h, --help                                                display this help message
         \\
         \\Commands:
-        \\  compile [-r [-l <limit>]] <input.jix> [-o <output.jout>]  compile a Jix program
-        \\  run <input.jout>                                          run a Jix's compiled program
-        \\  disasm <input.jout>                                       disassemble a Jix's compiled program
+        \\  compile [-r [-l <limit>] [-s]] <input.jix> [-o <output.jout>]  compile a Jix program
+        \\  run [-s] <input.jout>                                          run a Jix's compiled program
+        \\  disasm <input.jout>                                            disassemble a Jix's compiled program
         \\
     , .{program}) catch unreachable;
 }
@@ -45,6 +47,7 @@ pub fn main() !void {
             var run = false;
             var output_file: ?[]const u8 = null;
             var limit: isize = -1;
+            var step = false;
 
             while (args.next()) |flag| {
                 if (std.mem.eql(u8, flag, "-r")) {
@@ -69,6 +72,8 @@ pub fn main() !void {
                         stderr.print("error: limit is not provided\n", .{}) catch unreachable;
                         std.process.exit(1);
                     }
+                } else if (std.mem.eql(u8, flag, "-s")) {
+                    step = true;
                 } else {
                     if (flag[0] == '-') {
                         usage(stderr, program);
@@ -120,7 +125,13 @@ pub fn main() !void {
                     try jix.saveProgramToFile(output_file_path);
                 }
 
-                if (run) try jix.executeProgram(limit);
+                if (run) {
+                    try loadNatives(&jix);
+                    if (step)
+                        try stepDebug(&jix, limit)
+                    else
+                        try jix.executeProgram(limit);
+                }
             } else {
                 usage(stderr, program);
                 stderr.print("error: input file is not provided\n", .{}) catch unreachable;
@@ -129,6 +140,7 @@ pub fn main() !void {
         } else if (std.mem.eql(u8, subcommand, "run")) {
             var input_file: ?[]const u8 = null;
             var limit: isize = -1;
+            var step = false;
 
             while (args.next()) |flag| {
                 if (std.mem.eql(u8, flag, "-l")) {
@@ -143,6 +155,8 @@ pub fn main() !void {
                         stderr.print("error: limit is not provided\n", .{}) catch unreachable;
                         std.process.exit(1);
                     }
+                } else if (std.mem.eql(u8, flag, "-s")) {
+                    step = true;
                 } else {
                     if (flag[0] == '-') {
                         usage(stderr, program);
@@ -159,7 +173,12 @@ pub fn main() !void {
                 defer jix.deinit();
 
                 try jix.loadProgramFromFile(file_path);
-                try jix.executeProgram(limit);
+
+                try loadNatives(&jix);
+                if (step)
+                    try stepDebug(&jix, limit)
+                else
+                    try jix.executeProgram(limit);
             } else {
                 usage(stderr, program);
                 stderr.print("error: input file is not provided\n", .{}) catch unreachable;
@@ -179,16 +198,10 @@ pub fn main() !void {
                 try jix.loadProgramFromFile(file_path);
 
                 for (jix.program.items()) |inst| {
-                    const inst_name = @tagName(inst.@"type");
-                    if (Global.InstHasOperand.get(inst_name).?)
-                        switch (inst.operand) {
-                            .as_u64 => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
-                            .as_i64 => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
-                            .as_f64 => |w| stdout.print("{s} {d}\n", .{ inst_name, w }) catch unreachable,
-                            .as_ptr => |w| stdout.print("{s} {}\n", .{ inst_name, w }) catch unreachable,
-                        }
-                    else
-                        stdout.print("{s}\n", .{inst_name}) catch unreachable;
+                    var inst_str = try inst.toString(allocator);
+                    defer allocator.free(inst_str);
+
+                    stdout.print("{s}\n", .{inst_str}) catch unreachable;
                 }
             } else {
                 usage(stderr, program);
@@ -206,5 +219,31 @@ pub fn main() !void {
         usage(stderr, program);
         stderr.print("error: no subcommand provided\n", .{}) catch unreachable;
         std.process.exit(1);
+    }
+}
+
+fn loadNatives(jix: *Jix) !void {
+    const natives = [_]Natives.JixNative{ Natives.jixAlloc, Natives.jixFree };
+    for (&natives) |native, i| {
+        try jix.natives.put(i, native);
+    }
+}
+
+fn stepDebug(jix: *Jix, limit: isize) !void {
+    var m_limit = limit;
+    while (m_limit != 0 and !jix.halt) {
+        jix.dumpStack(stdout);
+
+        var inst = try jix.program.get(jix.ip).toString(jix.allocator);
+        defer jix.allocator.free(inst);
+
+        stdout.print("{s}\n", .{inst}) catch unreachable;
+
+        _ = try stdin.readByte();
+
+        try jix.executeInst();
+
+        if (m_limit > 0)
+            m_limit -= 1;
     }
 }

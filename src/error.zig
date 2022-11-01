@@ -8,6 +8,6 @@ pub const JixError = error{
     IllegalOperand, 
     MissingOperand, 
     IntegerOverflow, 
-    UnknownLabel
+    UnknownLabel,
 };
 // zig fmt: on

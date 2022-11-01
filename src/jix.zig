@@ -1,8 +1,10 @@
 const std = @import("std");
 const Writer = std.fs.File.Writer;
 const Allocator = std.mem.Allocator;
+const AutoHashMap = std.AutoHashMap;
 const Array = @import("array.zig").Array;
 const JixError = @import("error.zig").JixError;
+const JixNative = @import("natives.zig").JixNative;
 const AsmContext = @import("context.zig").AsmContext;
 
 usingnamespace @import("inst.zig");
@@ -18,7 +20,7 @@ pub const Word = union(enum) {
     as_u64: u64,
     as_i64: i64,
     as_f64: f64,
-    as_ptr: *anyopaque,
+    as_ptr: ?*anyopaque,
 };
 
 pub const Jix = struct {
@@ -29,6 +31,10 @@ pub const Jix = struct {
     program: Array(Global.Inst),
     ip: InstAddr = 0,
     context: AsmContext,
+
+    halt: bool = false,
+
+    natives: AutoHashMap(usize, JixNative),
 
     error_context: union {
         illegal_inst: struct {
@@ -42,8 +48,6 @@ pub const Jix = struct {
         },
     } = undefined,
 
-    halt: bool = false,
-
     const Self = @This();
 
     pub fn init(allocator: Allocator) Self {
@@ -52,6 +56,7 @@ pub const Jix = struct {
             .stack = Array(Word).init(allocator),
             .program = Array(Global.Inst).init(allocator),
             .context = AsmContext.init(allocator),
+            .natives = AutoHashMap(usize, JixNative).init(allocator),
         };
     }
 
@@ -59,6 +64,7 @@ pub const Jix = struct {
         self.stack.deinit();
         self.program.deinit();
         self.context.deinit();
+        self.natives.deinit();
         self.* = undefined;
     }
 
@@ -101,7 +107,7 @@ pub const Jix = struct {
                     continue;
             }
 
-            if (Global.InstFromString.get(inst_name)) |inst_type| {
+            if (Global.InstType.fromString(inst_name)) |inst_type| {
                 if (inst_type == .jmp or inst_type == .jmp_if or inst_type == .call) {
                     if (parts.next()) |operand| {
                         const t_operand = std.mem.trim(u8, operand, &std.ascii.spaces);
@@ -150,7 +156,7 @@ pub const Jix = struct {
                         return JixError.MissingOperand;
                     }
                 } else {
-                    if (Global.InstHasOperand.get(inst_name).?) {
+                    if (inst_type.hasOperand()) {
                         if (parts.next()) |operand| {
                             const t_operand = std.mem.trim(u8, operand, &std.ascii.spaces);
                             const n_operand = std.fmt.parseInt(u64, t_operand, 10) catch {
@@ -365,11 +371,19 @@ pub const Jix = struct {
                 const a = (try self.stack.pop()).as_u64;
                 self.ip = a;
             },
+            .native => {
+                if (self.natives.get(inst.operand.as_u64)) |native|
+                    try native(self)
+                else
+                    return JixError.IllegalOperand;
+
+                self.ip += 1;
+            },
             .halt => self.halt = true,
         }
     }
 
-    pub fn dumpStack(self: *const Self, writer: Writer) void {
+    pub fn dumpStack(self: Self, writer: Writer) void {
         writer.print("Stack:\n", .{}) catch unreachable;
 
         if (self.stack.size() > 0) {
@@ -379,7 +393,7 @@ pub const Jix = struct {
                     .as_u64 => |w| writer.print("  {}\n", .{w}) catch unreachable,
                     .as_i64 => |w| writer.print("  {}\n", .{w}) catch unreachable,
                     .as_f64 => |w| writer.print("  {d}\n", .{w}) catch unreachable,
-                    .as_ptr => |w| writer.print("  {}\n", .{w}) catch unreachable,
+                    .as_ptr => |w| writer.print("  {*}\n", .{w}) catch unreachable,
                 }
             }
         } else writer.print("  [empty]\n", .{}) catch unreachable;
@@ -405,7 +419,7 @@ pub const Jix = struct {
             try self.program.push(inst);
     }
 
-    pub fn saveProgramToFile(self: *const Self, file_path: []const u8) !void {
+    pub fn saveProgramToFile(self: Self, file_path: []const u8) !void {
         const cwd = std.fs.cwd();
 
         const f = try cwd.createFile(file_path, .{});
