@@ -8,11 +8,11 @@ const Global = @This();
 
 pub const Label = struct {
     name: []const u8,
-    addr: Global.InstAddr,
+    addr: Global.Word,
 };
 
 pub const DeferredOperand = struct {
-    addr: Global.InstAddr,
+    addr: Global.Word,
     label: []const u8,
 };
 
@@ -35,7 +35,7 @@ pub const AsmContext = struct {
         self.* = undefined;
     }
 
-    pub fn find(self: Self, name: []const u8) ?Global.InstAddr {
+    pub fn find(self: Self, name: []const u8) ?Global.Word {
         for (self.labels.items()) |label| {
             if (std.mem.eql(u8, label.name, name))
                 return label.addr;

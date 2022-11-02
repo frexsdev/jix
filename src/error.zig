@@ -10,5 +10,6 @@ pub const JixError = error{
     IntegerOverflow, 
     UndefinedLabel,
     UnknownNative,
+    UnknownDirective,
 };
 // zig fmt: on

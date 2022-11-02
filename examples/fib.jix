@@ -1,8 +1,10 @@
+%label N 30
+	
 	jmp main
 main:
 	push 0
 	push 1
-	push 30
+	push N
 loop:
 	swap 2
 	dup 0

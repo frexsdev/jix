@@ -106,7 +106,7 @@ pub fn main() !void {
                             std.process.exit(1);
                         },
                         JixError.MissingOperand => {
-                            stderr.print("{s}:{}: error: missing operand\n", .{
+                            stdout.print("{s}:{}: error: missing operand\n", .{
                                 file_path,
                                 jix.error_context.missing_operand.line_number,
                             }) catch unreachable;
@@ -115,6 +115,13 @@ pub fn main() !void {
                         JixError.UndefinedLabel => {
                             stderr.print("{s}: error: undefined label\n", .{
                                 file_path,
+                            }) catch unreachable;
+                            std.process.exit(1);
+                        },
+                        JixError.UnknownDirective => {
+                            stderr.print("{s}:{}: error: unknown pre-processor directive\n", .{
+                                file_path,
+                                jix.error_context.unknown_directive.line_number,
                             }) catch unreachable;
                             std.process.exit(1);
                         },

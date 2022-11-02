@@ -51,7 +51,11 @@ pub const Jix = struct {
         },
         unknown_label: struct {
             label: []const u8,
-        }
+        },
+        unknown_directive: struct {
+            line_number: usize,
+            directive: []const u8,
+        },
         // zig fmt: on
     } = undefined,
 
@@ -102,10 +106,54 @@ pub const Jix = struct {
             var parts = std.mem.split(u8, line, " ");
             var inst_name = std.mem.trim(u8, parts.next().?, &std.ascii.spaces);
 
+            if (inst_name[0] == '%') {
+                const directive = std.mem.trim(u8, inst_name[1..], &std.ascii.spaces);
+
+                if (std.mem.eql(u8, directive, "label")) {
+                    if (parts.next()) |label| {
+                        const t_label = std.mem.trim(u8, label, &std.ascii.spaces);
+                        if (parts.next()) |value| {
+                            const t_value = std.mem.trim(u8, value, &std.ascii.spaces);
+                            if (std.fmt.parseInt(u64, t_value, 10)) |i_value| {
+                                try self.context.labels.push(.{ .name = t_label, .addr = .{ .as_u64 = i_value } });
+                            } else |_| {
+                                if (std.fmt.parseFloat(f64, t_value)) |f_value| {
+                                    try self.context.labels.push(.{ .name = t_label, .addr = .{ .as_f64 = f_value } });
+                                } else |_| {
+                                    self.error_context = .{ .illegal_operand = .{
+                                        .line_number = line_number,
+                                        .operand = t_value,
+                                    } };
+                                    return JixError.IllegalOperand;
+                                }
+                            }
+                        } else {
+                            self.error_context = .{ .missing_operand = .{
+                                .line_number = line_number,
+                            } };
+                            return JixError.MissingOperand;
+                        }
+                    } else {
+                        self.error_context = .{ .missing_operand = .{
+                            .line_number = line_number,
+                        } };
+                        return JixError.MissingOperand;
+                    }
+                } else {
+                    self.error_context = .{ .unknown_directive = .{
+                        .line_number = line_number,
+                        .directive = directive,
+                    } };
+                    return JixError.UnknownDirective;
+                }
+
+                continue;
+            }
+
             if (inst_name[inst_name.len - 1] == ':') {
                 try self.context.labels.push(.{
                     .name = std.mem.trim(u8, inst_name[0 .. inst_name.len - 1], &std.ascii.spaces),
-                    .addr = self.program.size(),
+                    .addr = .{ .as_u64 = self.program.size() },
                 });
 
                 if (parts.next()) |after_label|
@@ -115,22 +163,26 @@ pub const Jix = struct {
             }
 
             if (Global.InstType.fromString(inst_name)) |inst_type| {
-                if (inst_type == .jmp or inst_type == .jmp_if or inst_type == .call) {
+                if (inst_type.hasOperand()) {
                     if (parts.next()) |operand| {
                         const t_operand = std.mem.trim(u8, operand, &std.ascii.spaces);
-
                         if (std.ascii.isDigit(t_operand[0])) {
-                            const n_operand = std.fmt.parseInt(u64, t_operand, 10) catch {
-                                self.error_context = .{ .illegal_operand = .{
-                                    .line_number = line_number,
-                                    .operand = t_operand,
-                                } };
-                                return JixError.IllegalOperand;
-                            };
-                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = n_operand } });
+                            if (std.fmt.parseInt(u64, t_operand, 10)) |i_operand| {
+                                try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = i_operand } });
+                            } else |_| {
+                                if (std.fmt.parseFloat(f64, t_operand)) |f_operand| {
+                                    try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_f64 = f_operand } });
+                                } else |_| {
+                                    self.error_context = .{ .illegal_operand = .{
+                                        .line_number = line_number,
+                                        .operand = t_operand,
+                                    } };
+                                    return JixError.IllegalOperand;
+                                }
+                            }
                         } else {
                             try self.context.deferred_operands.push(.{
-                                .addr = self.program.size(),
+                                .addr = .{ .as_u64 = self.program.size() },
                                 .label = t_operand,
                             });
 
@@ -142,49 +194,8 @@ pub const Jix = struct {
                         } };
                         return JixError.MissingOperand;
                     }
-                } else if (inst_type == .push) {
-                    if (parts.next()) |operand| {
-                        const t_operand = std.mem.trim(u8, operand, &std.ascii.spaces);
-                        if (std.fmt.parseInt(u64, t_operand, 10)) |i_operand| {
-                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = i_operand } });
-                        } else |_| {
-                            if (std.fmt.parseFloat(f64, t_operand)) |f_operand| {
-                                try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_f64 = f_operand } });
-                            } else |_| {
-                                self.error_context = .{ .illegal_operand = .{
-                                    .line_number = line_number,
-                                    .operand = t_operand,
-                                } };
-                                return JixError.IllegalOperand;
-                            }
-                        }
-                    } else {
-                        self.error_context = .{ .missing_operand = .{
-                            .line_number = line_number,
-                        } };
-                        return JixError.MissingOperand;
-                    }
                 } else {
-                    if (inst_type.hasOperand()) {
-                        if (parts.next()) |operand| {
-                            const t_operand = std.mem.trim(u8, operand, &std.ascii.spaces);
-                            const n_operand = std.fmt.parseInt(u64, t_operand, 10) catch {
-                                self.error_context = .{ .illegal_operand = .{
-                                    .line_number = line_number,
-                                    .operand = t_operand,
-                                } };
-                                return JixError.IllegalOperand;
-                            };
-                            try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = n_operand } });
-                        } else {
-                            self.error_context = .{ .missing_operand = .{
-                                .line_number = line_number,
-                            } };
-                            return JixError.MissingOperand;
-                        }
-                    } else {
-                        try self.program.push(.{ .@"type" = inst_type });
-                    }
+                    try self.program.push(.{ .@"type" = inst_type });
                 }
             } else {
                 self.error_context = .{ .illegal_inst = .{
@@ -197,7 +208,7 @@ pub const Jix = struct {
 
         for (self.context.deferred_operands.items()) |deferred_operand| {
             if (self.context.find(deferred_operand.label)) |addr|
-                self.program.items()[deferred_operand.addr].operand = .{ .as_u64 = addr }
+                self.program.items()[deferred_operand.addr.as_u64].operand = addr
             else {
                 self.error_context = .{ .unknown_label = .{
                     .label = deferred_operand.label,
