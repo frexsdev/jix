@@ -37,15 +37,22 @@ pub const Jix = struct {
     natives: AutoHashMap(usize, JixNative),
 
     error_context: union {
+        // zig fmt: off
         illegal_inst: struct {
             line_number: usize,
+            inst: []const u8,
         },
         illegal_operand: struct {
             line_number: usize,
+            operand: []const u8,
         },
         missing_operand: struct {
             line_number: usize,
         },
+        unknown_label: struct {
+            label: []const u8,
+        }
+        // zig fmt: on
     } = undefined,
 
     const Self = @This();
@@ -116,6 +123,7 @@ pub const Jix = struct {
                             const n_operand = std.fmt.parseInt(u64, t_operand, 10) catch {
                                 self.error_context = .{ .illegal_operand = .{
                                     .line_number = line_number,
+                                    .operand = t_operand,
                                 } };
                                 return JixError.IllegalOperand;
                             };
@@ -145,6 +153,7 @@ pub const Jix = struct {
                             } else |_| {
                                 self.error_context = .{ .illegal_operand = .{
                                     .line_number = line_number,
+                                    .operand = t_operand,
                                 } };
                                 return JixError.IllegalOperand;
                             }
@@ -162,6 +171,7 @@ pub const Jix = struct {
                             const n_operand = std.fmt.parseInt(u64, t_operand, 10) catch {
                                 self.error_context = .{ .illegal_operand = .{
                                     .line_number = line_number,
+                                    .operand = t_operand,
                                 } };
                                 return JixError.IllegalOperand;
                             };
@@ -179,6 +189,7 @@ pub const Jix = struct {
             } else {
                 self.error_context = .{ .illegal_inst = .{
                     .line_number = line_number,
+                    .inst = inst_name,
                 } };
                 return JixError.IllegalInst;
             }
@@ -187,8 +198,12 @@ pub const Jix = struct {
         for (self.context.deferred_operands.items()) |deferred_operand| {
             if (self.context.find(deferred_operand.label)) |addr|
                 self.program.items()[deferred_operand.addr].operand = .{ .as_u64 = addr }
-            else
-                return JixError.UnknownLabel;
+            else {
+                self.error_context = .{ .unknown_label = .{
+                    .label = deferred_operand.label,
+                } };
+                return JixError.UndefinedLabel;
+            }
         }
     }
 
@@ -581,7 +596,7 @@ pub const Jix = struct {
                 if (self.natives.get(inst.operand.as_u64)) |native|
                     try native(self)
                 else
-                    return JixError.IllegalOperand;
+                    return JixError.UnknownNative;
 
                 self.ip += 1;
             },

@@ -112,6 +112,12 @@ pub fn main() !void {
                             }) catch unreachable;
                             std.process.exit(1);
                         },
+                        JixError.UndefinedLabel => {
+                            stderr.print("{s}: error: undefined label\n", .{
+                                file_path,
+                            }) catch unreachable;
+                            std.process.exit(1);
+                        },
                         else => return e,
                     }
                 };
