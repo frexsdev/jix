@@ -1,8 +1,10 @@
 const std = @import("std");
 const Writer = std.fs.File.Writer;
 const Jix = @import("jix.zig").Jix;
+const String = @import("string.zig").String;
 const JixError = @import("error.zig").JixError;
 const natives = @import("natives.zig").natives;
+const ArenaAllocator = std.heap.ArenaAllocator;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 
 usingnamespace @import("inst.zig");
@@ -34,18 +36,19 @@ pub fn main() !void {
     var gpa = GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    const allocator = gpa.allocator();
+    var aa = ArenaAllocator.init(gpa.allocator());
+    defer aa.deinit();
+
+    const allocator = aa.allocator();
 
     var args = try std.process.argsWithAllocator(allocator);
-    defer args.deinit();
-
     const program = args.next().?;
 
     if (args.next()) |subcommand| {
         if (std.mem.eql(u8, subcommand, "compile")) {
-            var input_file: ?[]const u8 = null;
+            var input_file = String.init(allocator);
             var run = false;
-            var output_file: ?[]const u8 = null;
+            var output_file = String.init(allocator);
             var limit: isize = -1;
             var step = false;
 
@@ -54,7 +57,8 @@ pub fn main() !void {
                     run = true;
                 } else if (std.mem.eql(u8, flag, "-o")) {
                     if (args.next()) |file_path| {
-                        output_file = file_path;
+                        output_file.clear();
+                        try output_file.concat(file_path);
                     } else {
                         usage(stderr, program);
                         stderr.print("error: output file is not provided\n", .{}) catch unreachable;
@@ -81,77 +85,97 @@ pub fn main() !void {
                         std.process.exit(1);
                     }
 
-                    input_file = flag;
+                    input_file.clear();
+                    try input_file.concat(flag);
                 }
             }
 
-            if (input_file) |file_path| {
-                var jix = Jix.init(allocator);
-                defer jix.deinit();
-
-                jix.translateAsm(file_path) catch |e| {
-                    switch (e) {
-                        JixError.IllegalInst => {
-                            stderr.print("{s}:{}: error: illegal instruction\n", .{
-                                file_path,
-                                jix.error_context.illegal_inst.line_number,
-                            }) catch unreachable;
-                            std.process.exit(1);
-                        },
-                        JixError.IllegalOperand => {
-                            stderr.print("{s}:{}: error: illegal operand\n", .{
-                                file_path,
-                                jix.error_context.illegal_operand.line_number,
-                            }) catch unreachable;
-                            std.process.exit(1);
-                        },
-                        JixError.MissingOperand => {
-                            stdout.print("{s}:{}: error: missing operand\n", .{
-                                file_path,
-                                jix.error_context.missing_operand.line_number,
-                            }) catch unreachable;
-                            std.process.exit(1);
-                        },
-                        JixError.UndefinedLabel => {
-                            stderr.print("{s}: error: undefined label\n", .{
-                                file_path,
-                            }) catch unreachable;
-                            std.process.exit(1);
-                        },
-                        JixError.UnknownDirective => {
-                            stderr.print("{s}:{}: error: unknown pre-processor directive\n", .{
-                                file_path,
-                                jix.error_context.unknown_directive.line_number,
-                            }) catch unreachable;
-                            std.process.exit(1);
-                        },
-                        else => return e,
-                    }
-                };
-
-                if (output_file) |output_file_path| {
-                    try jix.saveProgramToFile(output_file_path);
-                } else {
-                    const output_file_path = try std.mem.concat(allocator, u8, ([_][]const u8{ file_path[0 .. file_path.len - 4], ".jout" })[0..]);
-                    defer allocator.free(output_file_path);
-
-                    try jix.saveProgramToFile(output_file_path);
-                }
-
-                if (run) {
-                    try loadNatives(&jix);
-                    if (step)
-                        try stepDebug(&jix, limit)
-                    else
-                        try jix.executeProgram(limit);
-                }
-            } else {
+            if (input_file.len() < 1) {
                 usage(stderr, program);
                 stderr.print("error: input file is not provided\n", .{}) catch unreachable;
                 std.process.exit(1);
             }
+
+            var jix = Jix.init(allocator);
+
+            jix.translateSource(input_file, 0) catch |e| {
+                switch (e) {
+                    JixError.IllegalInst => {
+                        stderr.print("{s}:{}: error: illegal instruction `{s}`\n", .{
+                            jix.error_context.illegal_inst.file_path.str(),
+                            jix.error_context.illegal_inst.line_number,
+                            jix.error_context.illegal_inst.inst.str(),
+                        }) catch unreachable;
+                        std.process.exit(1);
+                    },
+                    JixError.IllegalOperand => {
+                        stderr.print("{s}:{}: error: illegal operand `{s}`\n", .{
+                            jix.error_context.illegal_operand.file_path.str(),
+                            jix.error_context.illegal_operand.line_number,
+                            jix.error_context.illegal_operand.operand.str(),
+                        }) catch unreachable;
+                        std.process.exit(1);
+                    },
+                    JixError.MissingOperand => {
+                        stdout.print("{s}:{}: error: missing operand\n", .{
+                            jix.error_context.missing_operand.file_path.str(),
+                            jix.error_context.missing_operand.line_number,
+                        }) catch unreachable;
+                        std.process.exit(1);
+                    },
+                    JixError.UndefinedLabel => {
+                        stderr.print("{s}:{}: error: undefined label `{s}`\n", .{
+                            jix.error_context.undefined_label.file_path.str(),
+                            jix.error_context.undefined_label.line_number,
+                            jix.error_context.undefined_label.label.str(),
+                        }) catch unreachable;
+                        std.process.exit(1);
+                    },
+                    JixError.UnknownDirective => {
+                        stderr.print("{s}:{}: error: unknown pre-processor directive `{s}`\n", .{
+                            jix.error_context.unknown_directive.file_path.str(),
+                            jix.error_context.unknown_directive.line_number,
+                            jix.error_context.unknown_directive.directive.str(),
+                        }) catch unreachable;
+                        std.process.exit(1);
+                    },
+                    JixError.RedefinedLabel => {
+                        stderr.print("{s}:{}: error: label `{s}` is already defined\n", .{
+                            jix.error_context.redefined_label.file_path.str(),
+                            jix.error_context.redefined_label.line_number,
+                            jix.error_context.redefined_label.label.str(),
+                        }) catch unreachable;
+                        std.process.exit(1);
+                    },
+                    JixError.ExceededMaxIncludeLevel => {
+                        stderr.print("{s}:{}: error: exceeded maximum include level\n", .{
+                            jix.error_context.exceeded_max_include_level.file_path.str(),
+                            jix.error_context.exceeded_max_include_level.line_number,
+                        }) catch unreachable;
+                        std.process.exit(1);
+                    },
+                    else => return e,
+                }
+            };
+
+            if (output_file.len() < 1) {
+                try output_file.concat(input_file.str()[0 .. input_file.len() - 4]);
+                try output_file.concat(".jout");
+
+                try jix.saveProgramToFile(output_file);
+            } else {
+                try jix.saveProgramToFile(output_file);
+            }
+
+            if (run) {
+                try loadNatives(&jix);
+                if (step)
+                    try stepDebug(&jix, limit)
+                else
+                    try jix.executeProgram(limit);
+            }
         } else if (std.mem.eql(u8, subcommand, "run")) {
-            var input_file: ?[]const u8 = null;
+            var input_file = String.init(allocator);
             var limit: isize = -1;
             var step = false;
 
@@ -177,49 +201,47 @@ pub fn main() !void {
                         std.process.exit(1);
                     }
 
-                    input_file = flag;
+                    input_file.clear();
+                    try input_file.concat(flag);
                 }
             }
 
-            if (input_file) |file_path| {
-                var jix = Jix.init(allocator);
-                defer jix.deinit();
-
-                try jix.loadProgramFromFile(file_path);
-
-                try loadNatives(&jix);
-                if (step)
-                    try stepDebug(&jix, limit)
-                else
-                    try jix.executeProgram(limit);
-            } else {
+            if (input_file.len() < 1) {
                 usage(stderr, program);
                 stderr.print("error: input file is not provided\n", .{}) catch unreachable;
                 std.process.exit(1);
             }
+
+            var jix = Jix.init(allocator);
+
+            try jix.loadProgramFromFile(input_file);
+
+            try loadNatives(&jix);
+            if (step)
+                try stepDebug(&jix, limit)
+            else
+                try jix.executeProgram(limit);
         } else if (std.mem.eql(u8, subcommand, "disasm")) {
-            var input_file: ?[]const u8 = null;
+            var input_file = String.init(allocator);
 
             while (args.next()) |flag| {
-                input_file = flag;
+                input_file.clear();
+                try input_file.concat(flag);
             }
 
-            if (input_file) |file_path| {
-                var jix = Jix.init(allocator);
-                defer jix.deinit();
-
-                try jix.loadProgramFromFile(file_path);
-
-                for (jix.program.items()) |inst| {
-                    var inst_str = try inst.toString(allocator);
-                    defer allocator.free(inst_str);
-
-                    stdout.print("{s}\n", .{inst_str}) catch unreachable;
-                }
-            } else {
+            if (input_file.len() < 1) {
                 usage(stderr, program);
                 stderr.print("error: input file is not provided\n", .{}) catch unreachable;
                 std.process.exit(1);
+            }
+
+            var jix = Jix.init(allocator);
+
+            try jix.loadProgramFromFile(input_file);
+
+            for (jix.program.items()) |inst| {
+                var inst_str = try inst.toString(allocator);
+                stdout.print("{s}\n", .{inst_str.str()}) catch unreachable;
             }
         } else if (std.mem.eql(u8, subcommand, "--help") or std.mem.eql(u8, subcommand, "-h")) {
             usage(stdout, program);
@@ -247,9 +269,7 @@ fn stepDebug(jix: *Jix, limit: isize) !void {
         jix.dumpStack(stdout);
 
         var inst = try jix.program.get(jix.ip).toString(jix.allocator);
-        defer jix.allocator.free(inst);
-
-        stdout.print("Instruction: {s}\n", .{inst}) catch unreachable;
+        stdout.print("Instruction: {s}\n", .{inst.str()}) catch unreachable;
 
         _ = try stdin.readByte();
 

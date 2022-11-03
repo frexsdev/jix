@@ -1,3 +1,5 @@
+%include "./examples/natives.hix"
+
 %label N 30
 	
 	jmp main
@@ -8,7 +10,7 @@ main:
 loop:
 	swap 2
 	dup 0
-	native 2
+	native print
 	dup 1
 	add
 	swap 1

@@ -3,6 +3,7 @@ const Writer = std.fs.File.Writer;
 const Allocator = std.mem.Allocator;
 const AutoHashMap = std.AutoHashMap;
 const Array = @import("array.zig").Array;
+const String = @import("string.zig").String;
 const JixError = @import("error.zig").JixError;
 const JixNative = @import("natives.zig").JixNative;
 const AsmContext = @import("context.zig").AsmContext;
@@ -13,6 +14,8 @@ const stdout = std.io.getStdOut().writer();
 const stderr = std.io.getStdErr().writer();
 
 const Global = @This();
+
+const JIX_MAX_INCLUDE_LEVEL = 69;
 
 pub const InstAddr = usize;
 
@@ -39,22 +42,37 @@ pub const Jix = struct {
     error_context: union {
         // zig fmt: off
         illegal_inst: struct {
+            file_path: String,
             line_number: usize,
-            inst: []const u8,
+            inst: String,
         },
         illegal_operand: struct {
+            file_path: String,
             line_number: usize,
-            operand: []const u8,
+            operand: String,
         },
         missing_operand: struct {
+            file_path: String,
             line_number: usize,
         },
-        unknown_label: struct {
-            label: []const u8,
+        undefined_label: struct {
+            file_path: String,
+            line_number: usize,
+            label: String,
         },
         unknown_directive: struct {
+            file_path: String,
             line_number: usize,
-            directive: []const u8,
+            directive: String,
+        },
+        redefined_label: struct {
+            file_path: String,
+            line_number: usize,
+            label: String,
+        }, 
+        exceeded_max_include_level: struct {
+            file_path: String,
+            line_number: usize,
         },
         // zig fmt: on
     } = undefined,
@@ -79,68 +97,120 @@ pub const Jix = struct {
         self.* = undefined;
     }
 
-    pub fn translateAsm(self: *Self, file_path: []const u8) !void {
+    pub fn translateSource(self: *Self, file_path: String, level: usize) !void {
+        var absolute_path = try std.fs.realpathAlloc(self.allocator, file_path.str());
+        const f = try std.fs.openFileAbsolute(absolute_path, .{ .mode = .read_only });
+
+        var source_str = try f.readToEndAlloc(self.allocator, std.math.maxInt(usize));
+
+        var source = String.init(self.allocator);
+        try source.concat(source_str);
+
         self.program.reset();
 
-        var absolute_path = try std.fs.realpathAlloc(self.allocator, file_path);
-        defer self.allocator.free(absolute_path);
-
-        const f = try std.fs.openFileAbsolute(absolute_path, .{ .mode = .read_only });
-        defer f.close();
-
-        var source = try f.readToEndAlloc(self.allocator, std.math.maxInt(usize));
-        defer self.allocator.free(source);
-
-        var lines = std.mem.split(u8, source, "\n");
         var line_number: usize = 0;
-        while (lines.next()) |o_line| {
+        while (try source.splitToString("\n", line_number)) |c_line| {
             line_number += 1;
 
-            if (o_line.len < 1) continue;
+            var line = try c_line.clone();
+            line.trim(&std.ascii.spaces);
 
-            var line_c = std.mem.split(u8, std.mem.trim(u8, o_line, &std.ascii.spaces), ";");
-            const line = line_c.next().?;
+            if (line.isEmpty()) continue;
 
-            if (line.len < 1) continue;
+            var comment = try line.splitToString(";", 0);
+            if (comment) |n_line| {
+                line = n_line;
+                line.trim(&std.ascii.spaces);
+            } else continue;
 
-            var parts = std.mem.split(u8, line, " ");
-            var inst_name = std.mem.trim(u8, parts.next().?, &std.ascii.spaces);
+            var inst_name = (try line.splitToString(" ", 0)).?;
+            inst_name.trim(&std.ascii.spaces);
 
-            if (inst_name[0] == '%') {
-                const directive = std.mem.trim(u8, inst_name[1..], &std.ascii.spaces);
+            if (std.mem.eql(u8, inst_name.charAt(0).?, "%")) {
+                var directive = try inst_name.substr(1, inst_name.len());
+                directive.trim(&std.ascii.spaces);
 
-                if (std.mem.eql(u8, directive, "label")) {
-                    if (parts.next()) |label| {
-                        const t_label = std.mem.trim(u8, label, &std.ascii.spaces);
-                        if (parts.next()) |value| {
-                            const t_value = std.mem.trim(u8, value, &std.ascii.spaces);
-                            if (std.fmt.parseInt(u64, t_value, 10)) |i_value| {
-                                try self.context.labels.push(.{ .name = t_label, .addr = .{ .as_u64 = i_value } });
+                if (directive.cmp("label")) {
+                    if (try line.splitToString(" ", 1)) |c_label| {
+                        var label = try c_label.clone();
+                        label.trim(&std.ascii.spaces);
+
+                        if (try line.splitToString(" ", 2)) |c_value| {
+                            var value = try c_value.clone();
+                            value.trim(&std.ascii.spaces);
+
+                            if (self.context.resolve(label)) |_| {
+                                self.error_context = .{ .redefined_label = .{
+                                    .file_path = file_path,
+                                    .line_number = line_number,
+                                    .label = label,
+                                } };
+                                return JixError.RedefinedLabel;
+                            }
+
+                            if (std.fmt.parseInt(u64, value.str(), 10)) |i_value| {
+                                try self.context.bindLabel(label, .{ .as_u64 = i_value });
                             } else |_| {
-                                if (std.fmt.parseFloat(f64, t_value)) |f_value| {
-                                    try self.context.labels.push(.{ .name = t_label, .addr = .{ .as_f64 = f_value } });
+                                if (std.fmt.parseFloat(f64, value.str())) |f_value| {
+                                    try self.context.bindLabel(label, .{ .as_f64 = f_value });
                                 } else |_| {
                                     self.error_context = .{ .illegal_operand = .{
+                                        .file_path = file_path,
                                         .line_number = line_number,
-                                        .operand = t_value,
+                                        .operand = value,
                                     } };
                                     return JixError.IllegalOperand;
                                 }
                             }
                         } else {
                             self.error_context = .{ .missing_operand = .{
+                                .file_path = file_path,
                                 .line_number = line_number,
                             } };
                             return JixError.MissingOperand;
                         }
                     } else {
                         self.error_context = .{ .missing_operand = .{
+                            .file_path = file_path,
+                            .line_number = line_number,
+                        } };
+                        return JixError.MissingOperand;
+                    }
+                } else if (directive.cmp("include")) {
+                    if (try line.splitToString(" ", 1)) |c_path| {
+                        var path = try c_path.clone();
+                        path.trim(&std.ascii.spaces);
+
+                        if (std.mem.eql(u8, path.charAt(0).?, "\"") and std.mem.eql(u8, path.charAt(path.len() - 1).?, "\"")) {
+                            var n_path = try path.substr(1, path.len() - 1);
+
+                            if (level + 1 >= JIX_MAX_INCLUDE_LEVEL) {
+                                self.error_context = .{ .exceeded_max_include_level = .{
+                                    .file_path = file_path,
+                                    .line_number = line_number,
+                                } };
+                                return JixError.ExceededMaxIncludeLevel;
+                            }
+
+                            try self.translateSource(n_path, level + 1);
+                        } else {
+                            self.error_context = .{ .illegal_operand = .{
+                                .file_path = file_path,
+                                .line_number = line_number,
+                                .operand = path,
+                            } };
+                            return JixError.IllegalOperand;
+                        }
+                    } else {
+                        self.error_context = .{ .missing_operand = .{
+                            .file_path = file_path,
                             .line_number = line_number,
                         } };
                         return JixError.MissingOperand;
                     }
                 } else {
                     self.error_context = .{ .unknown_directive = .{
+                        .file_path = file_path,
                         .line_number = line_number,
                         .directive = directive,
                     } };
@@ -150,46 +220,61 @@ pub const Jix = struct {
                 continue;
             }
 
-            if (inst_name[inst_name.len - 1] == ':') {
-                try self.context.labels.push(.{
-                    .name = std.mem.trim(u8, inst_name[0 .. inst_name.len - 1], &std.ascii.spaces),
-                    .addr = .{ .as_u64 = self.program.size() },
-                });
+            if (std.mem.eql(u8, inst_name.charAt(inst_name.len() - 1).?, ":")) {
+                var label = try inst_name.substr(0, inst_name.len() - 1);
+                label.trim(&std.ascii.spaces);
 
-                if (parts.next()) |after_label|
-                    inst_name = std.mem.trim(u8, after_label, &std.ascii.spaces)
-                else
-                    continue;
+                if (self.context.resolve(label)) |_| {
+                    self.error_context = .{ .redefined_label = .{
+                        .file_path = file_path,
+                        .line_number = line_number,
+                        .label = label,
+                    } };
+                    return JixError.RedefinedLabel;
+                }
+
+                try self.context.bindLabel(label, .{ .as_u64 = self.program.size() });
+
+                if (try line.splitToString(" ", 1)) |c_after_label| {
+                    var after_label = try c_after_label.clone();
+                    after_label.trim(&std.ascii.spaces);
+                    inst_name = after_label;
+                } else continue;
             }
 
             if (Global.InstType.fromString(inst_name)) |inst_type| {
                 if (inst_type.hasOperand()) {
-                    if (parts.next()) |operand| {
-                        const t_operand = std.mem.trim(u8, operand, &std.ascii.spaces);
-                        if (std.ascii.isDigit(t_operand[0])) {
-                            if (std.fmt.parseInt(u64, t_operand, 10)) |i_operand| {
+                    if (try line.splitToString(" ", 1)) |c_operand| {
+                        var operand = try c_operand.clone();
+                        operand.trim(&std.ascii.spaces);
+
+                        if (std.ascii.isDigit(operand.charAt(0).?[0])) {
+                            if (std.fmt.parseInt(u64, operand.str(), 10)) |i_operand| {
                                 try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_u64 = i_operand } });
                             } else |_| {
-                                if (std.fmt.parseFloat(f64, t_operand)) |f_operand| {
+                                if (std.fmt.parseFloat(f64, operand.str())) |f_operand| {
                                     try self.program.push(.{ .@"type" = inst_type, .operand = .{ .as_f64 = f_operand } });
                                 } else |_| {
                                     self.error_context = .{ .illegal_operand = .{
+                                        .file_path = file_path,
                                         .line_number = line_number,
-                                        .operand = t_operand,
+                                        .operand = operand,
                                     } };
                                     return JixError.IllegalOperand;
                                 }
                             }
                         } else {
                             try self.context.deferred_operands.push(.{
-                                .addr = .{ .as_u64 = self.program.size() },
-                                .label = t_operand,
+                                .addr = self.program.size(),
+                                .label = operand,
+                                .line_number = line_number,
                             });
 
                             try self.program.push(.{ .@"type" = inst_type });
                         }
                     } else {
                         self.error_context = .{ .missing_operand = .{
+                            .file_path = file_path,
                             .line_number = line_number,
                         } };
                         return JixError.MissingOperand;
@@ -199,6 +284,7 @@ pub const Jix = struct {
                 }
             } else {
                 self.error_context = .{ .illegal_inst = .{
+                    .file_path = file_path,
                     .line_number = line_number,
                     .inst = inst_name,
                 } };
@@ -207,10 +293,12 @@ pub const Jix = struct {
         }
 
         for (self.context.deferred_operands.items()) |deferred_operand| {
-            if (self.context.find(deferred_operand.label)) |addr|
-                self.program.items()[deferred_operand.addr.as_u64].operand = addr
+            if (self.context.resolve(deferred_operand.label)) |word|
+                self.program.items()[deferred_operand.addr].operand = word
             else {
-                self.error_context = .{ .unknown_label = .{
+                self.error_context = .{ .undefined_label = .{
+                    .file_path = file_path,
+                    .line_number = deferred_operand.line_number,
                     .label = deferred_operand.label,
                 } };
                 return JixError.UndefinedLabel;
@@ -636,26 +724,20 @@ pub const Jix = struct {
             try self.program.push(inst);
     }
 
-    pub fn loadProgramFromFile(self: *Self, file_path: []const u8) !void {
-        var absolute_path = try std.fs.realpathAlloc(self.allocator, file_path);
-        defer self.allocator.free(absolute_path);
-
+    pub fn loadProgramFromFile(self: *Self, file_path: String) !void {
+        var absolute_path = try std.fs.realpathAlloc(self.allocator, file_path.str());
         const f = try std.fs.openFileAbsolute(absolute_path, .{ .mode = .read_only });
-        defer f.close();
 
         var bytes = try f.readToEndAlloc(self.allocator, std.math.maxInt(usize));
-        defer self.allocator.free(bytes);
 
         const program = std.mem.bytesAsSlice(Global.Inst, bytes);
         for (program) |inst|
             try self.program.push(inst);
     }
 
-    pub fn saveProgramToFile(self: Self, file_path: []const u8) !void {
+    pub fn saveProgramToFile(self: Self, file_path: String) !void {
         const cwd = std.fs.cwd();
-
-        const f = try cwd.createFile(file_path, .{});
-        defer f.close();
+        const f = try cwd.createFile(file_path.str(), .{});
 
         try f.writeAll(std.mem.sliceAsBytes(self.program.items()));
     }

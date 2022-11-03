@@ -1,0 +1,3 @@
+%label alloc 0
+%label free 1
+%label print 2

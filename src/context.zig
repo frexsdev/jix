@@ -1,19 +1,22 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Array = @import("array.zig").Array;
+const String = @import("string.zig").String;
+const JixError = @import("error.zig").JixError;
 
 usingnamespace @import("jix.zig");
 
 const Global = @This();
 
 pub const Label = struct {
-    name: []const u8,
-    addr: Global.Word,
+    name: String,
+    word: Global.Word,
 };
 
 pub const DeferredOperand = struct {
-    addr: Global.Word,
-    label: []const u8,
+    addr: Global.InstAddr,
+    label: String,
+    line_number: usize,
 };
 
 pub const AsmContext = struct {
@@ -35,12 +38,16 @@ pub const AsmContext = struct {
         self.* = undefined;
     }
 
-    pub fn find(self: Self, name: []const u8) ?Global.Word {
+    pub fn resolve(self: Self, name: String) ?Global.Word {
         for (self.labels.items()) |label| {
-            if (std.mem.eql(u8, label.name, name))
-                return label.addr;
+            if (std.mem.eql(u8, label.name.str(), name.str()))
+                return label.word;
         }
 
         return null;
+    }
+
+    pub fn bindLabel(self: *Self, name: String, word: Global.Word) JixError!void {
+        try self.labels.push(.{ .name = name, .word = word });
     }
 };

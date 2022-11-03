@@ -1,3 +1,5 @@
+%include "./examples/natives.hix"
+	
 	jmp main
 main:	
 	push 4.
@@ -33,6 +35,6 @@ loop:
 
 	drop
 	drop
-	native 2
+	native print
 
 	halt

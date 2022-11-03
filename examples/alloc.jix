@@ -1,9 +1,11 @@
+%include "./examples/natives.hix"
+    
     jmp main
 main:
     push 420
-    native 0
+    native alloc
     dup 0
-    native 2
-    native 1
+    native print
+    native free
     
     halt

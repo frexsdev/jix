@@ -2,6 +2,7 @@ const std = @import("std");
 const Word = @import("jix.zig").Word;
 const Allocator = std.mem.Allocator;
 const AutoHashMap = std.AutoHashMap;
+const String = @import("string.zig").String;
 const ComptimeStringMap = std.ComptimeStringMap;
 
 pub const InstType = enum {
@@ -35,9 +36,9 @@ pub const InstType = enum {
 
     const Self = @This();
 
-    pub fn fromString(str: []const u8) ?Self {
+    pub fn fromString(str: String) ?Self {
         for (std.enums.values(Self)) |inst| {
-            if (std.mem.eql(u8, @tagName(inst), str))
+            if (str.cmp(@tagName(inst)))
                 return inst;
         }
 
@@ -69,16 +70,38 @@ pub const Inst = struct {
 
     const Self = @This();
 
-    pub fn toString(self: Self, allocator: Allocator) ![]const u8 {
-        const inst_name = @tagName(self.@"type");
+    pub fn toString(self: Self, allocator: Allocator) !String {
+        var result = String.init(allocator);
+        try result.concat(@tagName(self.@"type"));
+
         if (InstType.hasOperand(self.@"type"))
-            return switch (self.operand) {
-                .as_u64 => |w| try std.fmt.allocPrint(allocator, "{s} {}", .{ inst_name, w }),
-                .as_i64 => |w| try std.fmt.allocPrint(allocator, "{s} {}", .{ inst_name, w }),
-                .as_f64 => |w| try std.fmt.allocPrint(allocator, "{s} {d}", .{ inst_name, w }),
-                .as_ptr => |w| try std.fmt.allocPrint(allocator, "{s} {*}", .{ inst_name, w }),
-            }
-        else
-            return try std.fmt.allocPrint(allocator, "{s}", .{inst_name});
+            switch (self.operand) {
+                .as_u64 => |w| {
+                    var word = try std.fmt.allocPrint(allocator, " {}", .{w});
+                    defer allocator.free(word);
+
+                    try result.concat(word);
+                },
+                .as_i64 => |w| {
+                    var word = try std.fmt.allocPrint(allocator, " {}", .{w});
+                    defer allocator.free(word);
+
+                    try result.concat(word);
+                },
+                .as_f64 => |w| {
+                    var word = try std.fmt.allocPrint(allocator, " {d}", .{w});
+                    defer allocator.free(word);
+
+                    try result.concat(word);
+                },
+                .as_ptr => |w| {
+                    var word = try std.fmt.allocPrint(allocator, " {*}", .{w});
+                    defer allocator.free(word);
+
+                    try result.concat(word);
+                },
+            };
+
+        return result;
     }
 };

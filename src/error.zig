@@ -11,5 +11,7 @@ pub const JixError = error{
     UndefinedLabel,
     UnknownNative,
     UnknownDirective,
+    RedefinedLabel,
+    ExceededMaxIncludeLevel,
 };
 // zig fmt: on

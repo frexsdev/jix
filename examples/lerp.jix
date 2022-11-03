@@ -1,3 +1,5 @@
+%include "./examples/natives.hix"
+	
 	jmp main
 
 lerp:
@@ -29,7 +31,7 @@ loop:
 	dup 3
 	dup 3
 	call lerp
-	native 2
+	native print
 	
 	swap 1
 	dup 1

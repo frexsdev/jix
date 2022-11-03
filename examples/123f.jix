@@ -1,3 +1,5 @@
+%include "./examples/natives.hix"
+    
     jmp main
 main:
     push 1.
@@ -5,6 +7,6 @@ main:
     push 3.
     add
     add
-    native 2
+    native print
     
     halt
