@@ -14,13 +14,23 @@ pub const natives = [_]JixNative{
 };
 
 fn jixAlloc(jix: *Jix) JixError!void {
-    const a = (try jix.stack.pop()).as_u64;
-    try jix.stack.push(.{ .as_ptr = std.c.malloc(a) });
+    const a_w = try jix.stack.pop();
+    switch (a_w) {
+        .as_u64 => |a| {
+            try jix.stack.push(.{ .as_ptr = std.c.malloc(a) });
+        },
+        else => JixError.IllegalOperand,
+    }
 }
 
 fn jixFree(jix: *Jix) JixError!void {
-    const a = (try jix.stack.pop()).as_ptr;
-    std.c.free(a);
+    const a_w = try jix.stack.pop();
+    switch (a_w) {
+        .as_ptr => |a| {
+            std.c.free(a);
+        },
+        else => JixError.IllegalOperand,
+    }
 }
 
 fn jixPrint(jix: *Jix) JixError!void {

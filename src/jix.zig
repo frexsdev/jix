@@ -331,22 +331,32 @@ pub const Jix = struct {
                 self.ip += 1;
             },
             .dup => {
-                if (self.stack.size() - @intCast(InstAddr, inst.operand.as_u64) <= 0)
-                    return JixError.StackUnderflow;
+                switch (inst.operand) {
+                    .as_u64 => |operand| {
+                        if (self.stack.size() - @intCast(InstAddr, operand) <= 0)
+                            return JixError.StackUnderflow;
 
-                try self.stack.push(self.stack.get(self.stack.size() - 1 - @intCast(InstAddr, inst.operand.as_u64)));
+                        try self.stack.push(self.stack.get(self.stack.size() - 1 - @intCast(InstAddr, operand)));
 
-                self.ip += 1;
+                        self.ip += 1;
+                    },
+                    else => return JixError.IllegalOperand,
+                }
             },
             .swap => {
-                const a = self.stack.size() - 1;
-                const b = self.stack.size() - 1 - @intCast(usize, inst.operand.as_u64);
+                switch (inst.operand) {
+                    .as_u64 => |operand| {
+                        const a = self.stack.size() - 1;
+                        const b = self.stack.size() - 1 - @intCast(usize, operand);
 
-                const t = self.stack.get(a);
-                self.stack.items()[a] = self.stack.get(b);
-                self.stack.items()[b] = t;
+                        const t = self.stack.get(a);
+                        self.stack.items()[a] = self.stack.get(b);
+                        self.stack.items()[b] = t;
 
-                self.ip += 1;
+                        self.ip += 1;
+                    },
+                    else => return JixError.IllegalOperand,
+                }
             },
             .drop => {
                 _ = try self.stack.pop();
@@ -675,29 +685,61 @@ pub const Jix = struct {
             },
 
             // misc
-            .jmp => self.ip = inst.operand.as_u64,
+            .jmp => {
+                switch (inst.operand) {
+                    .as_u64 => |operand| {
+                        self.ip = operand;
+                    },
+                    else => return JixError.IllegalOperand,
+                }
+            },
             .jmp_if => {
-                const a = (try self.stack.pop()).as_u64;
-                if (a != 0)
-                    self.ip = inst.operand.as_u64
-                else
-                    self.ip += 1;
+                const a_w = try self.stack.pop();
+                switch (a_w) {
+                    .as_u64 => |a| {
+                        switch (inst.operand) {
+                            .as_u64 => |operand| {
+                                if (a != 0)
+                                    self.ip = operand
+                                else
+                                    self.ip += 1;
+                            },
+                            else => return JixError.IllegalOperand,
+                        }
+                    },
+                    else => return JixError.IllegalOperand,
+                }
             },
             .call => {
-                try self.stack.push(.{ .as_u64 = self.ip + 1 });
-                self.ip = inst.operand.as_u64;
+                switch (inst.operand) {
+                    .as_u64 => |operand| {
+                        try self.stack.push(.{ .as_u64 = self.ip + 1 });
+                        self.ip = operand;
+                    },
+                    else => return JixError.IllegalOperand,
+                }
             },
             .ret => {
-                const a = (try self.stack.pop()).as_u64;
-                self.ip = a;
+                const a_w = try self.stack.pop();
+                switch (a_w) {
+                    .as_u64 => |a| {
+                        self.ip = a;
+                    },
+                    else => return JixError.IllegalOperand,
+                }
             },
             .native => {
-                if (self.natives.get(inst.operand.as_u64)) |native|
-                    try native(self)
-                else
-                    return JixError.UnknownNative;
+                switch (inst.operand) {
+                    .as_u64 => |operand| {
+                        if (self.natives.get(operand)) |native|
+                            try native(self)
+                        else
+                            return JixError.UnknownNative;
 
-                self.ip += 1;
+                        self.ip += 1;
+                    },
+                    else => return JixError.IllegalOperand,
+                }
             },
             .halt => self.halt = true,
         }
