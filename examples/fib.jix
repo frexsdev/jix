@@ -1,4 +1,4 @@
-%include "./examples/natives.hix"
+%include "./examples/natives.jix"
 
 %label N 30
 	
