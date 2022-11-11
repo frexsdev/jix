@@ -26,6 +26,14 @@ pub const InstType = enum {
     lt,
     let,
 
+    // bitwise
+    andb,
+    orb,
+    xor,
+    shr,
+    shl,
+    notb,
+
     // misc
     jmp,
     jmp_if,

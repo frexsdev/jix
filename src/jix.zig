@@ -1216,6 +1216,118 @@ pub const Jix = struct {
                 self.ip += 1;
             },
 
+            // bitwise
+            .andb => {
+                @panic("TODO: `andb`");
+            },
+            .orb => {
+                @panic("TODO: `orb`");
+            },
+            .xor => {
+                const a_w = self.stack.pop() catch |e| {
+                    self.error_context = .{ .stack_underflow = .{
+                        .file_path = self.file_path,
+                        .line_number = inst.line_number,
+                    } };
+                    return e;
+                };
+                const b_w = self.stack.pop() catch |e| {
+                    self.error_context = .{ .stack_underflow = .{
+                        .file_path = self.file_path,
+                        .line_number = inst.line_number,
+                    } };
+                    return e;
+                };
+                switch (a_w) {
+                    .as_u64 => |a| {
+                        switch (b_w) {
+                            .as_u64 => |b| {
+                                self.stack.push(.{ .as_u64 = b ^ @intCast(u6, a) }) catch |e| {
+                                    self.error_context = .{ .stack_overflow = .{
+                                        .file_path = self.file_path,
+                                        .line_number = inst.line_number,
+                                    } };
+                                    return e;
+                                };
+                            },
+                            else => {
+                                self.error_context = .{ .illegal_operand = .{
+                                    .file_path = self.file_path,
+                                    .line_number = inst.line_number,
+                                    .operand = .{ .word = b_w },
+                                } };
+                                return JixError.IllegalOperand;
+                            },
+                        }
+                    },
+                    else => {
+                        self.error_context = .{ .illegal_operand = .{
+                            .file_path = self.file_path,
+                            .line_number = inst.line_number,
+                            .operand = .{ .word = a_w },
+                        } };
+                        return JixError.IllegalOperand;
+                    },
+                }
+
+                self.ip += 1;
+            },
+            .shr => {
+                const a_w = self.stack.pop() catch |e| {
+                    self.error_context = .{ .stack_underflow = .{
+                        .file_path = self.file_path,
+                        .line_number = inst.line_number,
+                    } };
+                    return e;
+                };
+                const b_w = self.stack.pop() catch |e| {
+                    self.error_context = .{ .stack_underflow = .{
+                        .file_path = self.file_path,
+                        .line_number = inst.line_number,
+                    } };
+                    return e;
+                };
+                switch (a_w) {
+                    .as_u64 => |a| {
+                        switch (b_w) {
+                            .as_u64 => |b| {
+                                self.stack.push(.{ .as_u64 = b >> @intCast(u6, a) }) catch |e| {
+                                    self.error_context = .{ .stack_overflow = .{
+                                        .file_path = self.file_path,
+                                        .line_number = inst.line_number,
+                                    } };
+                                    return e;
+                                };
+                            },
+                            else => {
+                                self.error_context = .{ .illegal_operand = .{
+                                    .file_path = self.file_path,
+                                    .line_number = inst.line_number,
+                                    .operand = .{ .word = b_w },
+                                } };
+                                return JixError.IllegalOperand;
+                            },
+                        }
+                    },
+                    else => {
+                        self.error_context = .{ .illegal_operand = .{
+                            .file_path = self.file_path,
+                            .line_number = inst.line_number,
+                            .operand = .{ .word = a_w },
+                        } };
+                        return JixError.IllegalOperand;
+                    },
+                }
+
+                self.ip += 1;
+            },
+            .shl => {
+                @panic("TODO: `shl`");
+            },
+            .notb => {
+                @panic("TODO: `notb`");
+            },
+
             // misc
             .jmp => {
                 switch (inst.operand) {
