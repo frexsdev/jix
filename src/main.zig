@@ -97,6 +97,7 @@ pub fn main() !void {
             }
 
             var jix = Jix.init(allocator);
+            defer jix.deinit();
 
             jix.translateSource(input_file, 0) catch |e| {
                 switch (e) {
@@ -112,7 +113,7 @@ pub fn main() !void {
                         stderr.print("{s}:{}: error: illegal operand `{s}`\n", .{
                             jix.error_context.illegal_operand.file_path.str(),
                             jix.error_context.illegal_operand.line_number,
-                            jix.error_context.illegal_operand.operand.str(),
+                            jix.error_context.illegal_operand.operand.string.str(),
                         }) catch unreachable;
                         std.process.exit(1);
                     },
@@ -172,7 +173,7 @@ pub fn main() !void {
                 if (step)
                     try stepDebug(&jix, limit)
                 else
-                    try jix.executeProgram(limit);
+                    try executeProgram(&jix, limit);
             }
         } else if (std.mem.eql(u8, subcommand, "run")) {
             var input_file = String.init(allocator);
@@ -213,6 +214,7 @@ pub fn main() !void {
             }
 
             var jix = Jix.init(allocator);
+            defer jix.deinit();
 
             try jix.loadProgramFromFile(input_file);
 
@@ -220,7 +222,7 @@ pub fn main() !void {
             if (step)
                 try stepDebug(&jix, limit)
             else
-                try jix.executeProgram(limit);
+                try executeProgram(&jix, limit);
         } else if (std.mem.eql(u8, subcommand, "disasm")) {
             var input_file = String.init(allocator);
 
@@ -236,6 +238,7 @@ pub fn main() !void {
             }
 
             var jix = Jix.init(allocator);
+            defer jix.deinit();
 
             try jix.loadProgramFromFile(input_file);
 
@@ -268,7 +271,7 @@ fn stepDebug(jix: *Jix, limit: isize) !void {
     while (m_limit != 0 and !jix.halt) {
         jix.dumpStack(stdout);
 
-        var inst = try jix.program.get(jix.ip).toString(jix.allocator);
+        var inst = try jix.program.get(jix.ip).toString(jix.aa.allocator());
         stdout.print("Instruction: {s}\n", .{inst.str()}) catch unreachable;
 
         _ = try stdin.readByte();
@@ -278,4 +281,57 @@ fn stepDebug(jix: *Jix, limit: isize) !void {
         if (m_limit > 0)
             m_limit -= 1;
     }
+}
+
+fn executeProgram(jix: *Jix, limit: isize) !void {
+    jix.executeProgram(limit) catch |e| {
+        switch (e) {
+            JixError.StackUnderflow => {
+                stderr.print("{s}:{}: error: stack underflow\n", .{
+                    jix.error_context.stack_underflow.file_path.str(),
+                    jix.error_context.stack_underflow.line_number,
+                }) catch unreachable;
+            },
+            JixError.StackOverflow => {
+                stderr.print("{s}:{}: error: stack overflow\n", .{
+                    jix.error_context.stack_overflow.file_path.str(),
+                    jix.error_context.stack_overflow.line_number,
+                }) catch unreachable;
+            },
+            JixError.IllegalOperand => {
+                switch (jix.error_context.illegal_operand.operand.word) {
+                    .as_i64 => |operand| {
+                        stderr.print("{s}:{}: error: illegal operand `{}` (i64)\n", .{
+                            jix.error_context.illegal_operand.file_path.str(),
+                            jix.error_context.illegal_operand.line_number,
+                            operand,
+                        }) catch unreachable;
+                    },
+                    .as_u64 => |operand| {
+                        stderr.print("{s}:{}: error: illegal operand `{}` (u64)\n", .{
+                            jix.error_context.illegal_operand.file_path.str(),
+                            jix.error_context.illegal_operand.line_number,
+                            operand,
+                        }) catch unreachable;
+                    },
+                    .as_f64 => |operand| {
+                        stderr.print("{s}:{}: error: illegal operand `{d}` (f64)\n", .{
+                            jix.error_context.illegal_operand.file_path.str(),
+                            jix.error_context.illegal_operand.line_number,
+                            operand,
+                        }) catch unreachable;
+                    },
+                    .as_ptr => |operand| {
+                        stderr.print("{s}:{}: error: illegal operand `{*}` (ptr)\n", .{
+                            jix.error_context.illegal_operand.file_path.str(),
+                            jix.error_context.illegal_operand.line_number,
+                            operand,
+                        }) catch unreachable;
+                    },
+                }
+                std.process.exit(1);
+            },
+            else => return e,
+        }
+    };
 }

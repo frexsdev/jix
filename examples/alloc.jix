@@ -1,8 +1,10 @@
 %include "./examples/natives.hix"
+
+%label MEMORY_SIZE 420
     
     jmp main
 main:
-    push 420
+    push MEMORY_SIZE
     native alloc
     dup 0
     native print

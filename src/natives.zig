@@ -19,7 +19,7 @@ fn jixAlloc(jix: *Jix) JixError!void {
         .as_u64 => |a| {
             try jix.stack.push(.{ .as_ptr = std.c.malloc(a) });
         },
-        else => JixError.IllegalOperand,
+        else => return JixError.IllegalOperand,
     }
 }
 
@@ -29,7 +29,7 @@ fn jixFree(jix: *Jix) JixError!void {
         .as_ptr => |a| {
             std.c.free(a);
         },
-        else => JixError.IllegalOperand,
+        else => return JixError.IllegalOperand,
     }
 }
 

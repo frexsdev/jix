@@ -67,6 +67,7 @@ pub const InstType = enum {
 pub const Inst = struct {
     @"type": InstType,
     operand: Word = undefined,
+    line_number: usize,
 
     const Self = @This();
 
