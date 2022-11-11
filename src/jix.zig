@@ -1463,7 +1463,34 @@ pub const Jix = struct {
                 self.ip += 1;
             },
             .notb => {
-                @panic("TODO: `notb`");
+                const a_w = self.stack.pop() catch |e| {
+                    self.error_context = .{ .stack_underflow = .{
+                        .file_path = self.file_path,
+                        .line_number = inst.line_number,
+                    } };
+                    return e;
+                };
+                switch (a_w) {
+                    .as_u64 => |a| {
+                        self.stack.push(.{ .as_u64 = ~a }) catch |e| {
+                            self.error_context = .{ .stack_overflow = .{
+                                .file_path = self.file_path,
+                                .line_number = inst.line_number,
+                            } };
+                            return e;
+                        };
+                    },
+                    else => {
+                        self.error_context = .{ .illegal_operand = .{
+                            .file_path = self.file_path,
+                            .line_number = inst.line_number,
+                            .operand = .{ .word = a_w },
+                        } };
+                        return JixError.IllegalOperand;
+                    },
+                }
+
+                self.ip += 1;
             },
 
             // misc
