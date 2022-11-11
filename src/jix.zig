@@ -37,19 +37,16 @@ pub const Jix = struct {
     context: AsmContext,
 
     halt: bool = false,
-    file_path: String,
 
     natives: AutoHashMap(usize, JixNative),
 
     error_context: union {
         // zig fmt: off
         illegal_inst: struct {
-            file_path: String,
             line_number: usize,
             inst: String,
         },
         illegal_operand: struct {
-            file_path: String,
             line_number: usize,
             operand: union {
                 string: String,
@@ -57,42 +54,33 @@ pub const Jix = struct {
             },
         },
         missing_operand: struct {
-            file_path: String,
             line_number: usize,
         },
         undefined_label: struct {
-            file_path: String,
             line_number: usize,
             label: String,
         },
         unknown_directive: struct {
-            file_path: String,
             line_number: usize,
             directive: String,
         },
         redefined_label: struct {
-            file_path: String,
             line_number: usize,
             label: String,
         }, 
         exceeded_max_include_level: struct {
-            file_path: String,
             line_number: usize,
         },
         stack_underflow: struct {
-            file_path: String,
             line_number: usize,
         },
         stack_overflow: struct {
-            file_path: String,
             line_number: usize,
         },
         integer_overflow: struct {
-            file_path: String,
             line_number: usize,
         },
         unknown_native: struct {
-            file_path: String,
             line_number: usize,
             native: u64,
         },
@@ -108,7 +96,6 @@ pub const Jix = struct {
             .program = Array(Global.Inst).init(child_allocator),
             .context = AsmContext.init(child_allocator),
             .natives = AutoHashMap(usize, JixNative).init(child_allocator),
-            .file_path = String.init(child_allocator),
         };
     }
 
@@ -117,7 +104,6 @@ pub const Jix = struct {
         self.program.deinit();
         self.context.deinit();
         self.natives.deinit();
-        self.file_path.deinit();
         self.aa.deinit();
         self.* = undefined;
     }
@@ -133,8 +119,8 @@ pub const Jix = struct {
 
         self.program.reset();
 
-        self.file_path.clear();
-        try self.file_path.concat(file_path.str());
+        self.context.file_path.clear();
+        try self.context.file_path.concat(file_path.str());
 
         var line_number: usize = 0;
         while (try source.splitToString("\n", line_number)) |c_line| {
@@ -169,7 +155,6 @@ pub const Jix = struct {
 
                             if (self.context.resolve(label)) |_| {
                                 self.error_context = .{ .redefined_label = .{
-                                    .file_path = file_path,
                                     .line_number = line_number,
                                     .label = label,
                                 } };
@@ -183,7 +168,6 @@ pub const Jix = struct {
                                     try self.context.bindLabel(label, .{ .as_f64 = f_value });
                                 } else |_| {
                                     self.error_context = .{ .illegal_operand = .{
-                                        .file_path = file_path,
                                         .line_number = line_number,
                                         .operand = .{ .string = value },
                                     } };
@@ -192,14 +176,12 @@ pub const Jix = struct {
                             }
                         } else {
                             self.error_context = .{ .missing_operand = .{
-                                .file_path = file_path,
                                 .line_number = line_number,
                             } };
                             return JixError.MissingOperand;
                         }
                     } else {
                         self.error_context = .{ .missing_operand = .{
-                            .file_path = file_path,
                             .line_number = line_number,
                         } };
                         return JixError.MissingOperand;
@@ -214,7 +196,6 @@ pub const Jix = struct {
 
                             if (level + 1 >= JIX_MAX_INCLUDE_LEVEL) {
                                 self.error_context = .{ .exceeded_max_include_level = .{
-                                    .file_path = file_path,
                                     .line_number = line_number,
                                 } };
                                 return JixError.ExceededMaxIncludeLevel;
@@ -223,7 +204,6 @@ pub const Jix = struct {
                             try self.translateSource(n_path, level + 1);
                         } else {
                             self.error_context = .{ .illegal_operand = .{
-                                .file_path = file_path,
                                 .line_number = line_number,
                                 .operand = .{ .string = path },
                             } };
@@ -231,14 +211,12 @@ pub const Jix = struct {
                         }
                     } else {
                         self.error_context = .{ .missing_operand = .{
-                            .file_path = file_path,
                             .line_number = line_number,
                         } };
                         return JixError.MissingOperand;
                     }
                 } else {
                     self.error_context = .{ .unknown_directive = .{
-                        .file_path = file_path,
                         .line_number = line_number,
                         .directive = directive,
                     } };
@@ -254,7 +232,6 @@ pub const Jix = struct {
 
                 if (self.context.resolve(label)) |_| {
                     self.error_context = .{ .redefined_label = .{
-                        .file_path = file_path,
                         .line_number = line_number,
                         .label = label,
                     } };
@@ -292,7 +269,6 @@ pub const Jix = struct {
                                     });
                                 } else |_| {
                                     self.error_context = .{ .illegal_operand = .{
-                                        .file_path = file_path,
                                         .line_number = line_number,
                                         .operand = .{ .string = operand },
                                     } };
@@ -313,7 +289,6 @@ pub const Jix = struct {
                         }
                     } else {
                         self.error_context = .{ .missing_operand = .{
-                            .file_path = file_path,
                             .line_number = line_number,
                         } };
                         return JixError.MissingOperand;
@@ -326,7 +301,6 @@ pub const Jix = struct {
                 }
             } else {
                 self.error_context = .{ .illegal_inst = .{
-                    .file_path = file_path,
                     .line_number = line_number,
                     .inst = inst_name,
                 } };
@@ -339,7 +313,6 @@ pub const Jix = struct {
                 self.program.items()[deferred_operand.addr].operand = word
             else {
                 self.error_context = .{ .undefined_label = .{
-                    .file_path = file_path,
                     .line_number = deferred_operand.line_number,
                     .label = deferred_operand.label,
                 } };
@@ -377,7 +350,6 @@ pub const Jix = struct {
                     .as_u64 => |operand| {
                         if (self.stack.size() - @intCast(InstAddr, operand) <= 0) {
                             self.error_context = .{ .stack_underflow = .{
-                                .file_path = self.file_path,
                                 .line_number = inst.line_number,
                             } };
                             return JixError.StackUnderflow;
@@ -389,7 +361,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = inst.operand },
                         } };
@@ -411,7 +382,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = inst.operand },
                         } };
@@ -437,7 +407,6 @@ pub const Jix = struct {
                                 var result: i64 = undefined;
                                 if (@addWithOverflow(i64, b, a, &result)) {
                                     self.error_context = .{ .integer_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return JixError.IntegerOverflow;
@@ -445,7 +414,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -459,7 +427,6 @@ pub const Jix = struct {
                                 var result: u64 = undefined;
                                 if (@addWithOverflow(u64, b, a, &result)) {
                                     self.error_context = .{ .integer_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return JixError.IntegerOverflow;
@@ -467,7 +434,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -482,7 +448,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -492,7 +457,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -513,7 +477,6 @@ pub const Jix = struct {
                                 var result: i64 = undefined;
                                 if (@subWithOverflow(i64, b, a, &result)) {
                                     self.error_context = .{ .integer_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return JixError.IntegerOverflow;
@@ -521,7 +484,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -535,7 +497,6 @@ pub const Jix = struct {
                                 var result: u64 = undefined;
                                 if (@subWithOverflow(u64, b, a, &result)) {
                                     self.error_context = .{ .integer_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return JixError.IntegerOverflow;
@@ -543,7 +504,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -558,7 +518,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -568,7 +527,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -581,14 +539,12 @@ pub const Jix = struct {
             .mult => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -601,13 +557,11 @@ pub const Jix = struct {
                                 var result: i64 = undefined;
                                 if (@mulWithOverflow(i64, b, a, &result)) {
                                     self.error_context = .{ .integer_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return JixError.IntegerOverflow;
                                 } else self.stack.push(.{ .as_i64 = result }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -615,7 +569,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -629,13 +582,11 @@ pub const Jix = struct {
                                 var result: u64 = undefined;
                                 if (@mulWithOverflow(u64, b, a, &result)) {
                                     self.error_context = .{ .integer_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return JixError.IntegerOverflow;
                                 } else self.stack.push(.{ .as_u64 = result }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -643,7 +594,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -656,7 +606,6 @@ pub const Jix = struct {
                             .as_f64 => |b| {
                                 self.stack.push(.{ .as_f64 = b * a }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -664,7 +613,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -674,7 +622,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -687,14 +634,12 @@ pub const Jix = struct {
             .div => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -706,7 +651,6 @@ pub const Jix = struct {
                             .as_i64 => |b| {
                                 self.stack.push(.{ .as_i64 = @divExact(b, a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -714,7 +658,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -727,7 +670,6 @@ pub const Jix = struct {
                             .as_u64 => |b| {
                                 self.stack.push(.{ .as_u64 = @divExact(b, a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -735,7 +677,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -748,7 +689,6 @@ pub const Jix = struct {
                             .as_f64 => |b| {
                                 self.stack.push(.{ .as_f64 = b / a }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -756,7 +696,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -766,7 +705,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -779,7 +717,6 @@ pub const Jix = struct {
             .not => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -788,7 +725,6 @@ pub const Jix = struct {
                     .as_i64 => |a| {
                         self.stack.push(.{ .as_u64 = @boolToInt(!(a != 0)) }) catch |e| {
                             self.error_context = .{ .stack_overflow = .{
-                                .file_path = self.file_path,
                                 .line_number = inst.line_number,
                             } };
                             return e;
@@ -797,7 +733,6 @@ pub const Jix = struct {
                     .as_u64 => |a| {
                         self.stack.push(.{ .as_u64 = @boolToInt(!(a != 0)) }) catch |e| {
                             self.error_context = .{ .stack_overflow = .{
-                                .file_path = self.file_path,
                                 .line_number = inst.line_number,
                             } };
                             return e;
@@ -806,7 +741,6 @@ pub const Jix = struct {
                     .as_f64 => |a| {
                         self.stack.push(.{ .as_u64 = @boolToInt(!(a != 0)) }) catch |e| {
                             self.error_context = .{ .stack_overflow = .{
-                                .file_path = self.file_path,
                                 .line_number = inst.line_number,
                             } };
                             return e;
@@ -814,7 +748,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -829,21 +762,18 @@ pub const Jix = struct {
             .eq => {
                 const a = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 self.stack.push(.{ .as_u64 = @boolToInt(std.meta.eql(a, b)) }) catch |e| {
                     self.error_context = .{ .stack_overflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -854,14 +784,12 @@ pub const Jix = struct {
             .gt => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -872,7 +800,6 @@ pub const Jix = struct {
                             .as_i64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b > a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -880,7 +807,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -893,7 +819,6 @@ pub const Jix = struct {
                             .as_u64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b > a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -901,7 +826,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -914,7 +838,6 @@ pub const Jix = struct {
                             .as_f64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b > a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -922,7 +845,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -932,7 +854,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -945,14 +866,12 @@ pub const Jix = struct {
             .get => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -963,7 +882,6 @@ pub const Jix = struct {
                             .as_i64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b >= a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -971,7 +889,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -984,7 +901,6 @@ pub const Jix = struct {
                             .as_u64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b >= a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -992,7 +908,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1005,7 +920,6 @@ pub const Jix = struct {
                             .as_f64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b >= a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1013,7 +927,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1023,7 +936,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -1036,14 +948,12 @@ pub const Jix = struct {
             .lt => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -1054,7 +964,6 @@ pub const Jix = struct {
                             .as_i64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b < a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1062,7 +971,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1075,7 +983,6 @@ pub const Jix = struct {
                             .as_u64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b < a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1083,7 +990,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1096,7 +1002,6 @@ pub const Jix = struct {
                             .as_f64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b < a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1104,7 +1009,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1114,7 +1018,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -1127,14 +1030,12 @@ pub const Jix = struct {
             .let => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -1145,7 +1046,6 @@ pub const Jix = struct {
                             .as_i64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b <= a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1153,7 +1053,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1166,7 +1065,6 @@ pub const Jix = struct {
                             .as_u64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b <= a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1174,7 +1072,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1187,7 +1084,6 @@ pub const Jix = struct {
                             .as_f64 => |b| {
                                 self.stack.push(.{ .as_u64 = @boolToInt(b <= a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1195,7 +1091,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1205,7 +1100,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -1220,14 +1114,12 @@ pub const Jix = struct {
             .andb => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -1238,7 +1130,6 @@ pub const Jix = struct {
                             .as_u64 => |b| {
                                 self.stack.push(.{ .as_u64 = b & @intCast(u6, a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1246,7 +1137,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1256,7 +1146,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -1269,14 +1158,12 @@ pub const Jix = struct {
             .orb => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -1287,7 +1174,6 @@ pub const Jix = struct {
                             .as_u64 => |b| {
                                 self.stack.push(.{ .as_u64 = b | @intCast(u6, a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1295,7 +1181,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1305,7 +1190,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -1318,14 +1202,12 @@ pub const Jix = struct {
             .xor => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -1336,7 +1218,6 @@ pub const Jix = struct {
                             .as_u64 => |b| {
                                 self.stack.push(.{ .as_u64 = b ^ @intCast(u6, a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1344,7 +1225,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1354,7 +1234,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -1367,14 +1246,12 @@ pub const Jix = struct {
             .shr => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -1385,7 +1262,6 @@ pub const Jix = struct {
                             .as_u64 => |b| {
                                 self.stack.push(.{ .as_u64 = b >> @intCast(u6, a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1393,7 +1269,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1403,7 +1278,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -1416,14 +1290,12 @@ pub const Jix = struct {
             .shl => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
                 };
                 const b_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -1434,7 +1306,6 @@ pub const Jix = struct {
                             .as_u64 => |b| {
                                 self.stack.push(.{ .as_u64 = b << @intCast(u6, a) }) catch |e| {
                                     self.error_context = .{ .stack_overflow = .{
-                                        .file_path = self.file_path,
                                         .line_number = inst.line_number,
                                     } };
                                     return e;
@@ -1442,7 +1313,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = b_w },
                                 } };
@@ -1452,7 +1322,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -1465,7 +1334,6 @@ pub const Jix = struct {
             .notb => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -1474,7 +1342,6 @@ pub const Jix = struct {
                     .as_u64 => |a| {
                         self.stack.push(.{ .as_u64 = ~a }) catch |e| {
                             self.error_context = .{ .stack_overflow = .{
-                                .file_path = self.file_path,
                                 .line_number = inst.line_number,
                             } };
                             return e;
@@ -1482,7 +1349,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -1501,7 +1367,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = inst.operand },
                         } };
@@ -1512,7 +1377,6 @@ pub const Jix = struct {
             .jmp_if => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -1528,7 +1392,6 @@ pub const Jix = struct {
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
-                                    .file_path = self.file_path,
                                     .line_number = inst.line_number,
                                     .operand = .{ .word = inst.operand },
                                 } };
@@ -1538,7 +1401,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = a_w },
                         } };
@@ -1551,7 +1413,6 @@ pub const Jix = struct {
                     .as_u64 => |operand| {
                         self.stack.push(.{ .as_u64 = self.ip + 1 }) catch |e| {
                             self.error_context = .{ .stack_overflow = .{
-                                .file_path = self.file_path,
                                 .line_number = inst.line_number,
                             } };
                             return e;
@@ -1560,7 +1421,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = inst.operand },
                         } };
@@ -1571,7 +1431,6 @@ pub const Jix = struct {
             .ret => {
                 const a_w = self.stack.pop() catch |e| {
                     self.error_context = .{ .stack_underflow = .{
-                        .file_path = self.file_path,
                         .line_number = inst.line_number,
                     } };
                     return e;
@@ -1582,7 +1441,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = inst.operand },
                         } };
@@ -1597,7 +1455,6 @@ pub const Jix = struct {
                             try native(self)
                         else {
                             self.error_context = .{ .unknown_native = .{
-                                .file_path = self.file_path,
                                 .line_number = inst.line_number,
                                 .native = operand,
                             } };
@@ -1608,7 +1465,6 @@ pub const Jix = struct {
                     },
                     else => {
                         self.error_context = .{ .illegal_operand = .{
-                            .file_path = self.file_path,
                             .line_number = inst.line_number,
                             .operand = .{ .word = inst.operand },
                         } };

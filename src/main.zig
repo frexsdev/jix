@@ -103,7 +103,7 @@ pub fn main() !void {
                 switch (e) {
                     JixError.IllegalInst => {
                         stderr.print("{s}:{}: error: illegal instruction `{s}`\n", .{
-                            jix.error_context.illegal_inst.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.illegal_inst.line_number,
                             jix.error_context.illegal_inst.inst.str(),
                         }) catch unreachable;
@@ -111,7 +111,7 @@ pub fn main() !void {
                     },
                     JixError.IllegalOperand => {
                         stderr.print("{s}:{}: error: illegal operand `{s}`\n", .{
-                            jix.error_context.illegal_operand.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.illegal_operand.line_number,
                             jix.error_context.illegal_operand.operand.string.str(),
                         }) catch unreachable;
@@ -119,14 +119,14 @@ pub fn main() !void {
                     },
                     JixError.MissingOperand => {
                         stdout.print("{s}:{}: error: missing operand\n", .{
-                            jix.error_context.missing_operand.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.missing_operand.line_number,
                         }) catch unreachable;
                         std.process.exit(1);
                     },
                     JixError.UndefinedLabel => {
                         stderr.print("{s}:{}: error: undefined label `{s}`\n", .{
-                            jix.error_context.undefined_label.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.undefined_label.line_number,
                             jix.error_context.undefined_label.label.str(),
                         }) catch unreachable;
@@ -134,7 +134,7 @@ pub fn main() !void {
                     },
                     JixError.UnknownDirective => {
                         stderr.print("{s}:{}: error: unknown pre-processor directive `{s}`\n", .{
-                            jix.error_context.unknown_directive.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.unknown_directive.line_number,
                             jix.error_context.unknown_directive.directive.str(),
                         }) catch unreachable;
@@ -142,7 +142,7 @@ pub fn main() !void {
                     },
                     JixError.RedefinedLabel => {
                         stderr.print("{s}:{}: error: label `{s}` is already defined\n", .{
-                            jix.error_context.redefined_label.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.redefined_label.line_number,
                             jix.error_context.redefined_label.label.str(),
                         }) catch unreachable;
@@ -150,21 +150,21 @@ pub fn main() !void {
                     },
                     JixError.ExceededMaxIncludeLevel => {
                         stderr.print("{s}:{}: error: exceeded maximum include level\n", .{
-                            jix.error_context.exceeded_max_include_level.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.exceeded_max_include_level.line_number,
                         }) catch unreachable;
                         std.process.exit(1);
                     },
                     JixError.IntegerOverflow => {
                         stderr.print("{s}:{}: error: integer overflow\n", .{
-                            jix.error_context.integer_overflow.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.integer_overflow.line_number,
                         }) catch unreachable;
                         std.process.exit(1);
                     },
                     JixError.UnknownNative => {
                         stderr.print("{s}:{}: error: unknown native `{}`\n", .{
-                            jix.error_context.unknown_native.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.unknown_native.line_number,
                             jix.error_context.unknown_native.native,
                         }) catch unreachable;
@@ -303,13 +303,13 @@ fn executeProgram(jix: *Jix, limit: isize) !void {
         switch (e) {
             JixError.StackUnderflow => {
                 stderr.print("{s}:{}: error: stack underflow\n", .{
-                    jix.error_context.stack_underflow.file_path.str(),
+                    jix.context.file_path.str(),
                     jix.error_context.stack_underflow.line_number,
                 }) catch unreachable;
             },
             JixError.StackOverflow => {
                 stderr.print("{s}:{}: error: stack overflow\n", .{
-                    jix.error_context.stack_overflow.file_path.str(),
+                    jix.context.file_path.str(),
                     jix.error_context.stack_overflow.line_number,
                 }) catch unreachable;
             },
@@ -317,28 +317,28 @@ fn executeProgram(jix: *Jix, limit: isize) !void {
                 switch (jix.error_context.illegal_operand.operand.word) {
                     .as_i64 => |operand| {
                         stderr.print("{s}:{}: error: illegal operand `{}` (i64)\n", .{
-                            jix.error_context.illegal_operand.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.illegal_operand.line_number,
                             operand,
                         }) catch unreachable;
                     },
                     .as_u64 => |operand| {
                         stderr.print("{s}:{}: error: illegal operand `{}` (u64)\n", .{
-                            jix.error_context.illegal_operand.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.illegal_operand.line_number,
                             operand,
                         }) catch unreachable;
                     },
                     .as_f64 => |operand| {
                         stderr.print("{s}:{}: error: illegal operand `{d}` (f64)\n", .{
-                            jix.error_context.illegal_operand.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.illegal_operand.line_number,
                             operand,
                         }) catch unreachable;
                     },
                     .as_ptr => |operand| {
                         stderr.print("{s}:{}: error: illegal operand `{*}` (ptr)\n", .{
-                            jix.error_context.illegal_operand.file_path.str(),
+                            jix.context.file_path.str(),
                             jix.error_context.illegal_operand.line_number,
                             operand,
                         }) catch unreachable;

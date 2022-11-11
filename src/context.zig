@@ -20,6 +20,7 @@ pub const DeferredOperand = struct {
 };
 
 pub const AsmContext = struct {
+    file_path: String,
     labels: Array(Label),
     deferred_operands: Array(DeferredOperand),
 
@@ -27,12 +28,14 @@ pub const AsmContext = struct {
 
     pub fn init(allocator: Allocator) Self {
         return .{
+            .file_path = String.init(allocator),
             .labels = Array(Label).init(allocator),
             .deferred_operands = Array(DeferredOperand).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
+        self.file_path.deinit();
         self.labels.deinit();
         self.deferred_operands.deinit();
         self.* = undefined;
