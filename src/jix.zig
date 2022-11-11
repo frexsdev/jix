@@ -87,6 +87,15 @@ pub const Jix = struct {
             file_path: String,
             line_number: usize,
         },
+        integer_overflow: struct {
+            file_path: String,
+            line_number: usize,
+        },
+        unknown_native: struct {
+            file_path: String,
+            line_number: usize,
+            native: u64,
+        },
         // zig fmt: on
     } = undefined,
 
@@ -366,8 +375,13 @@ pub const Jix = struct {
             .dup => {
                 switch (inst.operand) {
                     .as_u64 => |operand| {
-                        if (self.stack.size() - @intCast(InstAddr, operand) <= 0)
+                        if (self.stack.size() - @intCast(InstAddr, operand) <= 0) {
+                            self.error_context = .{ .stack_underflow = .{
+                                .file_path = self.file_path,
+                                .line_number = inst.line_number,
+                            } };
                             return JixError.StackUnderflow;
+                        }
 
                         try self.stack.push(self.stack.get(self.stack.size() - 1 - @intCast(InstAddr, operand)));
 
@@ -421,10 +435,13 @@ pub const Jix = struct {
                         switch (b_w) {
                             .as_i64 => |b| {
                                 var result: i64 = undefined;
-                                if (@addWithOverflow(i64, b, a, &result))
-                                    return JixError.IntegerOverflow
-                                else
-                                    try self.stack.push(.{ .as_i64 = result });
+                                if (@addWithOverflow(i64, b, a, &result)) {
+                                    self.error_context = .{ .integer_overflow = .{
+                                        .file_path = self.file_path,
+                                        .line_number = inst.line_number,
+                                    } };
+                                    return JixError.IntegerOverflow;
+                                } else try self.stack.push(.{ .as_i64 = result });
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
@@ -440,10 +457,13 @@ pub const Jix = struct {
                         switch (b_w) {
                             .as_u64 => |b| {
                                 var result: u64 = undefined;
-                                if (@addWithOverflow(u64, b, a, &result))
-                                    return JixError.IntegerOverflow
-                                else
-                                    try self.stack.push(.{ .as_u64 = result });
+                                if (@addWithOverflow(u64, b, a, &result)) {
+                                    self.error_context = .{ .integer_overflow = .{
+                                        .file_path = self.file_path,
+                                        .line_number = inst.line_number,
+                                    } };
+                                    return JixError.IntegerOverflow;
+                                } else try self.stack.push(.{ .as_u64 = result });
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
@@ -491,10 +511,13 @@ pub const Jix = struct {
                         switch (b_w) {
                             .as_i64 => |b| {
                                 var result: i64 = undefined;
-                                if (@subWithOverflow(i64, b, a, &result))
-                                    return JixError.IntegerOverflow
-                                else
-                                    try self.stack.push(.{ .as_i64 = result });
+                                if (@subWithOverflow(i64, b, a, &result)) {
+                                    self.error_context = .{ .integer_overflow = .{
+                                        .file_path = self.file_path,
+                                        .line_number = inst.line_number,
+                                    } };
+                                    return JixError.IntegerOverflow;
+                                } else try self.stack.push(.{ .as_i64 = result });
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
@@ -510,10 +533,13 @@ pub const Jix = struct {
                         switch (b_w) {
                             .as_u64 => |b| {
                                 var result: u64 = undefined;
-                                if (@subWithOverflow(u64, b, a, &result))
-                                    return JixError.IntegerOverflow
-                                else
-                                    try self.stack.push(.{ .as_u64 = result });
+                                if (@subWithOverflow(u64, b, a, &result)) {
+                                    self.error_context = .{ .integer_overflow = .{
+                                        .file_path = self.file_path,
+                                        .line_number = inst.line_number,
+                                    } };
+                                    return JixError.IntegerOverflow;
+                                } else try self.stack.push(.{ .as_u64 = result });
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
@@ -573,16 +599,19 @@ pub const Jix = struct {
                         switch (b_w) {
                             .as_i64 => |b| {
                                 var result: i64 = undefined;
-                                if (@mulWithOverflow(i64, b, a, &result))
-                                    return JixError.IntegerOverflow
-                                else
-                                    self.stack.push(.{ .as_i64 = result }) catch |e| {
-                                        self.error_context = .{ .stack_overflow = .{
-                                            .file_path = self.file_path,
-                                            .line_number = inst.line_number,
-                                        } };
-                                        return e;
-                                    };
+                                if (@mulWithOverflow(i64, b, a, &result)) {
+                                    self.error_context = .{ .integer_overflow = .{
+                                        .file_path = self.file_path,
+                                        .line_number = inst.line_number,
+                                    } };
+                                    return JixError.IntegerOverflow;
+                                } else self.stack.push(.{ .as_i64 = result }) catch |e| {
+                                    self.error_context = .{ .stack_overflow = .{
+                                        .file_path = self.file_path,
+                                        .line_number = inst.line_number,
+                                    } };
+                                    return e;
+                                };
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
@@ -598,16 +627,19 @@ pub const Jix = struct {
                         switch (b_w) {
                             .as_u64 => |b| {
                                 var result: u64 = undefined;
-                                if (@mulWithOverflow(u64, b, a, &result))
-                                    return JixError.IntegerOverflow
-                                else
-                                    self.stack.push(.{ .as_u64 = result }) catch |e| {
-                                        self.error_context = .{ .stack_overflow = .{
-                                            .file_path = self.file_path,
-                                            .line_number = inst.line_number,
-                                        } };
-                                        return e;
-                                    };
+                                if (@mulWithOverflow(u64, b, a, &result)) {
+                                    self.error_context = .{ .integer_overflow = .{
+                                        .file_path = self.file_path,
+                                        .line_number = inst.line_number,
+                                    } };
+                                    return JixError.IntegerOverflow;
+                                } else self.stack.push(.{ .as_u64 = result }) catch |e| {
+                                    self.error_context = .{ .stack_overflow = .{
+                                        .file_path = self.file_path,
+                                        .line_number = inst.line_number,
+                                    } };
+                                    return e;
+                                };
                             },
                             else => {
                                 self.error_context = .{ .illegal_operand = .{
@@ -1286,8 +1318,14 @@ pub const Jix = struct {
                     .as_u64 => |operand| {
                         if (self.natives.get(operand)) |native|
                             try native(self)
-                        else
+                        else {
+                            self.error_context = .{ .unknown_native = .{
+                                .file_path = self.file_path,
+                                .line_number = inst.line_number,
+                                .native = operand,
+                            } };
                             return JixError.UnknownNative;
+                        }
 
                         self.ip += 1;
                     },

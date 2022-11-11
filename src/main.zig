@@ -155,6 +155,21 @@ pub fn main() !void {
                         }) catch unreachable;
                         std.process.exit(1);
                     },
+                    JixError.IntegerOverflow => {
+                        stderr.print("{s}:{}: error: integer overflow\n", .{
+                            jix.error_context.integer_overflow.file_path.str(),
+                            jix.error_context.integer_overflow.line_number,
+                        }) catch unreachable;
+                        std.process.exit(1);
+                    },
+                    JixError.UnknownNative => {
+                        stderr.print("{s}:{}: error: unknown native `{}`\n", .{
+                            jix.error_context.unknown_native.file_path.str(),
+                            jix.error_context.unknown_native.line_number,
+                            jix.error_context.unknown_native.native,
+                        }) catch unreachable;
+                        std.process.exit(1);
+                    },
                     else => return e,
                 }
             };
